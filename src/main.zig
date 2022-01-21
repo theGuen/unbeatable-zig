@@ -1,7 +1,7 @@
-const ma = @cImport(@cInclude("miniaudio.h"));
 const ray = @cImport(@cInclude("raylibwrapper.h"));
 const sndFile = @import("sndFile.zig");
 const sndio = @import("sndio.zig");
+const ma = @import("miniaudio.zig");
 
 const std = @import("std");
 const math = @import("std").math;
@@ -13,87 +13,99 @@ fn shouldExit()bool{
     return exit;
 }
 
-var lpf:ma.ma_lpf = undefined;
-var lpfConf:ma.ma_lpf_config = undefined;
 var sampler:Sampler = undefined;
 
 const Sampler = struct{
+    alloc: std.mem.Allocator,
     selectedSound: usize,
     sounds: [16]Sound,
-    fn load(self: *Sampler,aloc: std.mem.Allocator, sample: *[]f32)void{
+    fn load(self: *Sampler, sample: *[]f32)void{
         var sound:*Sound = &self.sounds[self.selectedSound];
-        //TODO: Why do i need the sndPtr...
-        if (sound.loaded){
-            var sndPtr = &self.*.sounds[self.selectedSound];
-            sndPtr.loaded = false;
-            sound.aloc.free(sound.buffer);
-        }
+        //seems whe have to free the pointer last....
+        var b = sound.buffer;
         sound.buffer = sample.*;
-        sound.loaded = true;
-        sound.play = false;
-        sound.reverse = true;   
-        sound.posf = 1;
-        sound.loop = false;    
-        sound.pitch = 1;
-        sound.aloc = aloc;
+        sound.posf = 0;
+        sound.reversed = false;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
         self.selectedSound += 1;
+        if(b.len>0){
+            self.alloc.free(b);
+        }
+    }
+    fn play(self: *Sampler,soundIndex:usize)void{
+        self.selectedSound = soundIndex;
+        self.sounds[soundIndex].play();
     }
     fn reverseSound(self: *Sampler)void{
-        self.sounds[self.selectedSound].reverseIt();
+        self.sounds[self.selectedSound].reverse();
     }
+    fn loopSound(self: *Sampler)void{
+        self.sounds[self.selectedSound].looping= !self.sounds[self.selectedSound].looping;
+    }
+
 };
+fn initSampler(alloc: std.mem.Allocator)Sampler{
+    var this = Sampler{.alloc = alloc,.selectedSound=0,.sounds=undefined};
+    for (this.sounds) |*s|{
+        s.buffer = &[_]f32{}; 
+        s.posf = 0;
+        s.playing = false;
+        s.looping = false;
+        s.reversed = false;
+        s.pitch = 1;
+        s.semis = 0;
+    }
+    return this;
+}
 
 const Sound = struct{
     buffer: []f32,
     posf : f64,
-    play: bool,
-    loop :bool,
-    loaded:bool,
-    reverse: bool,
+    playing: bool,
+    looping :bool,
+    reversed: bool,
     pitch :f32,
     semis:i64,
-    aloc:std.mem.Allocator,
     fn next(p:*Sound)f32{
-        if (p.loaded and p.play){
-            var pos = @floatToInt(usize,p.posf);
-            const ende = @intToFloat(f32,p.buffer.len-1);
-            if(p.posf > ende and !p.reverse){
+        if (p.buffer.len >0 and p.playing){
+            var pos = @floatToInt(i64,p.posf);
+            const ende = @intToFloat(f64,p.buffer.len-1);
+            if(p.posf > ende and !p.reversed){
                 p.posf = p.posf-ende;
-                pos = @floatToInt(usize,p.posf);
-                if(!p.loop)p.play=false;
-            }else if (p.posf <= 0.0 and p.reverse){
-                p.posf = @intToFloat(f32,(p.buffer.len-1))-(0.0-p.posf);
-                pos = @floatToInt(usize,p.posf);
-                if(!p.loop)p.play=false;
+                pos = @floatToInt(i64,p.posf);
+                if(!p.looping)p.playing=false;
+            }else if (p.posf < 0.0 and p.reversed){
+                p.posf = @intToFloat(f64,(p.buffer.len-1))-(0.0-p.posf);
+                pos = @floatToInt(i64,p.posf);
+                if(!p.looping)p.playing=false;
             }
-            if (!p.reverse){
+            if (!p.reversed){
                 p.posf +=  p.pitch;
             }else{
                 p.posf -= p.pitch;
             }
-            return p.buffer[pos];
+            return p.buffer[@intCast(usize,pos)];
         }else{
             return 0;
         }
     }
-    fn playIt(p:*Sound)void{
-        p.play = true;
+    fn play(p:*Sound)void{
+        p.playing = true;
     }
-    fn stopIt(p:*Sound)void{
-        p.play = false;
-        if (!p.reverse){
+    fn stop(p:*Sound)void{
+        p.playing = false;
+        if (!p.reversed){
                 p.posf = 0;
             }else{
-                p.posf = @intToFloat(f32,p.buffer.len-1);
+                p.posf = @intToFloat(f64,p.buffer.len-1);
             }
     }
-    fn reverseIt(p:*Sound)void{
-        p.reverse = !p.reverse;
-        if (!p.reverse){
+    fn reverse(p:*Sound)void{
+        p.reversed = !p.reversed;
+        if (!p.reversed){
                 p.posf = 0;
             }else{
-                p.posf = @intToFloat(f32,p.buffer.len-1);
+                p.posf = @intToFloat(f64,p.buffer.len-1);
             }
     }
 };
@@ -134,104 +146,6 @@ fn mix()f32{
     return sample*0.8;
 }
 
-fn change_lpf_freq()void{
-    lpfConf.cutoffFrequency +=100;
-    _= ma.ma_lpf_reinit(&lpfConf, &lpf);
-}
-
-fn ma_create_lowpass(alloc:std.mem.Allocator)!void{       
-    lpf = std.mem.zeroes(ma.ma_lpf);
-    var heapSizeInBytes:usize = 1;
-    lpfConf = ma.ma_lpf_config_init(ma.ma_format_f32, 2, 44100, 1024, 4);
-    var r = ma.ma_lpf_get_heap_size(&lpfConf, &heapSizeInBytes);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_get_heap_size failed:{d}\n",.{r});
-    }
-    
-    std.debug.print("HERE\n",.{});
-    var buf = try alloc.alloc([]u8, heapSizeInBytes);
-    var bufPtr = @ptrCast(*anyopaque, buf);  
-    r = ma.ma_lpf_init_preallocated(&lpfConf, bufPtr,&lpf);
-    std.debug.print("HERE\n",.{});
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_init failed:{d}\n",.{r});
-    }
-    
-}
-
-fn ma_add_lowpass(out: [*c]f32,in: [*c]f32,frame_count: ma.ma_uint32)void{
-
-    var r = ma.ma_lpf_process_pcm_frames(&lpf, out, in, frame_count); 
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_process_pcm_frames failed:{d}\n",.{r});
-    }
-
-}
-
-fn ma_audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
-    _ = input;
-    _ = device;
-    var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
-    for (outw[0..frame_count*2]) |*b| b.* = mix();
-    ma_add_lowpass(outw,outw,frame_count);
-}
-fn ma_init_audio()!void{
-    var device = std.mem.zeroes(ma.ma_device);
-    var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_playback);
-    deviceConfig.playback.format   = ma.ma_format_f32;
-    deviceConfig.playback.channels = 2;
-    deviceConfig.sampleRate        = 44100;
-    deviceConfig.dataCallback      = ma_audio_callback;
-    deviceConfig.pUserData         = null;
-    var r = ma.ma_device_init(null, &deviceConfig, &device);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("Device init failed:{d}\n",.{r});
-        return  error.Unknown;
-    }
-    defer ma.ma_device_uninit(&device);
-    
-    r = ma.ma_device_start(&device);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("Could get available frames\n",.{});
-        return  error.Unknown;
-    }
-    defer r = ma.ma_device_stop(&device);
-    std.debug.print("Device internal channels:{d}\n",.{device.playback.internalChannels});
-    while (!exit){}
-}
-
-fn ma_load_file(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
-    var decoder = std.mem.zeroes(ma.ma_decoder);
-    var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, 44100);
-    var r = ma.ma_decoder_init_file(inFileName.ptr, &config, &decoder);
-    defer _ = ma.ma_decoder_uninit(&decoder);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("Could not load file {s}: {d}\n",.{inFileName,r});
-        return  error.Unknown;
-    }
-    std.debug.print("file openend: {d}/{d}\n", .{decoder.outputChannels,decoder.outputSampleRate});
-    var avail:c_ulonglong=0;
-    r = ma.ma_decoder_get_available_frames(&decoder,&avail);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("Could get available frames:{d}\n",.{r});
-        return  error.Unknown;
-    }
-    std.debug.print("available frames:{d}\n", .{avail});
-
-    var mybuffer: []f32 = undefined;
-    mybuffer = try alloc.alloc(f32, avail*2);
-    var read:c_ulonglong=0;
-    r = ma.ma_decoder_read_pcm_frames(&decoder, mybuffer.ptr,avail ,&read);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("Could read pcm frames:{d}\n",.{r});
-        return  error.Unknown;
-    }
-    if(mybuffer[10]== -1*math.nan(f32)){
-        mybuffer[10]=0;
-    }
-    return &mybuffer;
-}
-
 // TODO:This loop takes 33M in memory???
 fn drawWindow() void {
     const screenWidth = 450;
@@ -259,28 +173,29 @@ fn drawWindow() void {
 
         for (keys)|k,i|{
             if (ray.IsKeyPressed(k)){
-                sampler.sounds[i].playIt();
-                sampler.selectedSound = i;
+                sampler.play(i);
                 btn_colors[i]=ray.ORANGE;
             }
             if (ray.IsKeyReleased(k)){
-                sampler.sounds[i].stopIt();
+                sampler.sounds[i].stop();
                 btn_colors[i]=ray.GREEN;
             }
         }
         if (ray.IsKeyPressed(ray.KEY_P)){
                 sampler.reverseSound();
         }
-        
+        if (ray.IsKeyPressed(ray.KEY_L)){
+                sampler.loopSound();
+        }
         
         for (buttons) |*b,i|{
             if (ray.WrapCheckCollisionPointRec(&mousePosition, b)){
                 if (ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)){
-                    sampler.sounds[i].playIt();
+                    sampler.play(i);
                     btn_colors[i]=ray.ORANGE;
                 }
                 if (ray.IsMouseButtonReleased(ray.MOUSE_BUTTON_LEFT)){
-                    sampler.sounds[i].stopIt();
+                    sampler.sounds[i].stop();
                     btn_colors[i]=ray.GREEN;
                 }
             }
@@ -289,7 +204,7 @@ fn drawWindow() void {
         defer ray.EndDrawing();
 
         ray.ClearBackground(ray.RAYWHITE);
-        ray.DrawText("Press a button to play a sound", 10, 10, 5, ray.BLACK);
+        ray.DrawText("Press a button to playing a sound", 10, 10, 5, ray.BLACK);
         for (buttons) |*b,i|{
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
@@ -298,13 +213,16 @@ fn drawWindow() void {
 }
 
 pub fn main() !void {
+    sampler = initSampler(std.heap.page_allocator); 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
     try loadCmdLineArgSamples(alloc);
     std.debug.print("Sampler: {s}\n", .{sampler});
-    try ma_create_lowpass(alloc);
-    const audioThread = try std.Thread.spawn(.{}, ma_init_audio, .{});
+    try ma.ma_create_lowpass(alloc);
+    ma.mix = mix;
+    ma.exit = shouldExit;
+    const audioThread = try std.Thread.spawn(.{}, ma.ma_init_audio, .{});
     //sndio.mix = mix;
     //sndio.exit = shouldExit;
     //const audioThread = try std.Thread.spawn(.{},sndio.start_audio, .{});
@@ -326,8 +244,8 @@ fn loadCmdLineArgSamples(alloc:std.mem.Allocator)!void{
             break;
         });   
         var sndAloc = std.heap.page_allocator;
-        var b = try ma_load_file(sndAloc,arg1);
-        sampler.load(sndAloc,b);
+        var b = try ma.ma_load_file(sndAloc,arg1);
+        sampler.load(b);
     }
 }
 
@@ -340,8 +258,8 @@ fn userInput()!void{
         if (try stdin.readUntilDelimiterOrEof(buf[0..], '\n')) |user_input| {
             var sndAloc = std.heap.page_allocator;
             const bla:[]u8 = user_input;
-            if(ma_load_file(sndAloc,bla))|b|{
-                sampler.load(sndAloc,b);
+            if(ma.ma_load_file(sndAloc,bla))|b|{
+                sampler.load(b);
             }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
             }
