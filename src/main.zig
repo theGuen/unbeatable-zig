@@ -147,7 +147,7 @@ fn mix()f32{
 }
 
 // TODO:This loop takes 33M in memory???
-fn drawWindow() void {
+fn drawWindow() !void {
     const screenWidth = 450;
     const screenHeight = 500;
 
@@ -168,7 +168,12 @@ fn drawWindow() void {
     }
     const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Z,ray.KEY_X,ray.KEY_C,ray.KEY_V};
     var textBox = ray.Rectangle{ .x=230, .y=5, .width=210, .height=25 };
-    var dt = "testdata/drum.wav";
+    var dta = std.heap.page_allocator.alloc(u8, 256)catch |err| std.debug.panic("write failed: {s}", .{@errorName(err)});
+    dta[0]=0;
+    for (dta[0..255]) |*b| b.* = 0;
+    var dt = @ptrCast([*c]u8,dta);
+    var letterCount:usize = 0;
+    var onText = false;
 
     while (!ray.WindowShouldClose()) {
         var mousePosition = ray.GetMousePosition();
@@ -185,8 +190,36 @@ fn drawWindow() void {
             }
         }
         if (ray.WrapCheckCollisionPointRec(&mousePosition, &textBox)){
-            ray.SetMouseCursor(ray.MOUSE_CURSOR_IBEAM);
+            onText = true;
+            var key = ray.GetCharPressed();
+            while (key > 0){
+                if ((key >= 32) and(key <= 125) and (letterCount < 255)){
+                    dt[letterCount] = @intCast(u8,key);
+                    dt[letterCount+1] = 0; // Add null terminator at the end of the string.
+                    letterCount+=1;
+                }
+                key = ray.GetCharPressed();  // Check next character in the queue
+            }
+
+            if (ray.IsKeyPressed(ray.KEY_BACKSPACE)){
+                letterCount-=1;
+                if (letterCount < 0) letterCount = 0;
+                dt[letterCount] = 0;
+            }
+            if (ray.IsKeyPressed(ray.KEY_ENTER)){
+                if (dta[0] != 0){
+                    var sndAloc = std.heap.page_allocator;
+                    if(ma.loadAudioFile(sndAloc,dta))|b|{
+                        sampler.load(b);
+                        for (dta[0..255]) |*x| x.* = 0;
+                        letterCount = 0;
+                    }else |err|{
+                        std.debug.print("ERROR: {s}\n", .{@errorName(err)});
+                    }
+                }
+            }
         }else{
+            onText = false;
             for (keys)|k,i|{
                 if (ray.IsKeyPressed(k)){
                     sampler.play(i);
@@ -208,9 +241,17 @@ fn drawWindow() void {
         defer ray.EndDrawing();
 
         ray.ClearBackground(ray.RAYWHITE);
-        ray.DrawText("Press a button to playing a sound", 10, 10, 5, ray.BLACK);
-        ray.DrawText("Enter a sample name,and click ->", 10, 20, 5, ray.BLACK);
+        ray.DrawText("Enter a sample name to load ->", 10, 10, 8, ray.BLACK);
+        ray.DrawText("Press a button to playing a sound", 10, 20, 8, ray.BLACK);
+        
         ray.WrapDrawRectangleRec(&textBox, ray.GRAY);
+        if (onText){
+             ray.DrawRectangleLines(@floatToInt(c_int,textBox.x), @floatToInt(c_int,textBox.y), @floatToInt(c_int,textBox.width), @floatToInt(c_int,textBox.height), ray.RED);
+             ray.DrawText("_", @floatToInt(c_int,textBox.x) + 8 + ray.MeasureText(dt, 15), @floatToInt(c_int,textBox.y) + 10, 15, ray.MAROON);
+        }else{
+             ray.DrawRectangleLines(@floatToInt(c_int,textBox.x), @floatToInt(c_int,textBox.y), @floatToInt(c_int,textBox.width), @floatToInt(c_int,textBox.height), ray.DARKGRAY);
+        }
+
         ray.DrawText(dt, @floatToInt(c_int,textBox.x) + 5, @floatToInt(c_int,textBox.y) + 8, 15, ray.MAROON);
         for (buttons) |*b,i|{
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
@@ -237,7 +278,7 @@ pub fn main() !void {
     //TODO: just for now.. ui can't load samples
     _ = try std.Thread.spawn(.{}, userInput, .{});
     //Loop forever
-    _ = drawWindow();
+    _ = try drawWindow();
     audioThread.join();
 }
 
