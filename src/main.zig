@@ -1,31 +1,47 @@
-const c = @cImport(@cInclude("soundio/soundio.h"));
-const sf = @cImport(@cInclude("sndfile.h"));
 const ma = @cImport(@cInclude("miniaudio.h"));
 const ray = @cImport(@cInclude("raylibwrapper.h"));
+const sndFile = @import("sndFile.zig");
+const sndio = @import("sndio.zig");
 
 const std = @import("std");
 const math = @import("std").math;
 const assert = std.debug.assert;
 const process = std.process;
 
-var sounds: [16]Sound = undefined;
 var exit = false;
+fn shouldExit()bool{
+    return exit;
+}
+
 var lpf:ma.ma_lpf = undefined;
 var lpfConf:ma.ma_lpf_config = undefined;
+var sampler:Sampler = undefined;
 
-fn sio_err(err: c_int) !void {
-    switch (err) {
-         0 => {},
-        else => return error.Unknown,
+const Sampler = struct{
+    selectedSound: usize,
+    sounds: [16]Sound,
+    fn load(self: *Sampler,aloc: std.mem.Allocator, sample: *[]f32)void{
+        var sound:*Sound = &self.sounds[self.selectedSound];
+        //TODO: Why do i need the sndPtr...
+        if (sound.loaded){
+            var sndPtr = &self.*.sounds[self.selectedSound];
+            sndPtr.loaded = false;
+            sound.aloc.free(sound.buffer);
+        }
+        sound.buffer = sample.*;
+        sound.loaded = true;
+        sound.play = false;
+        sound.reverse = true;   
+        sound.posf = 1;
+        sound.loop = false;    
+        sound.pitch = 1;
+        sound.aloc = aloc;
+        std.debug.print("Loaded: {d}\n", .{self.selectedSound});
+        self.selectedSound += 1;
     }
-}
-const Info = extern struct {
-    frames: i64,
-    samplerate: c_int,
-    channels: c_int,
-    format: c_int,
-    sections: c_int,
-    seekable: c_int,
+    fn reverseSound(self: *Sampler)void{
+        self.sounds[self.selectedSound].reverseIt();
+    }
 };
 
 const Sound = struct{
@@ -36,26 +52,51 @@ const Sound = struct{
     loaded:bool,
     reverse: bool,
     pitch :f32,
+    semis:i64,
     aloc:std.mem.Allocator,
+    fn next(p:*Sound)f32{
+        if (p.loaded and p.play){
+            var pos = @floatToInt(usize,p.posf);
+            const ende = @intToFloat(f32,p.buffer.len-1);
+            if(p.posf > ende and !p.reverse){
+                p.posf = p.posf-ende;
+                pos = @floatToInt(usize,p.posf);
+                if(!p.loop)p.play=false;
+            }else if (p.posf <= 0.0 and p.reverse){
+                p.posf = @intToFloat(f32,(p.buffer.len-1))-(0.0-p.posf);
+                pos = @floatToInt(usize,p.posf);
+                if(!p.loop)p.play=false;
+            }
+            if (!p.reverse){
+                p.posf +=  p.pitch;
+            }else{
+                p.posf -= p.pitch;
+            }
+            return p.buffer[pos];
+        }else{
+            return 0;
+        }
+    }
+    fn playIt(p:*Sound)void{
+        p.play = true;
+    }
+    fn stopIt(p:*Sound)void{
+        p.play = false;
+        if (!p.reverse){
+                p.posf = 0;
+            }else{
+                p.posf = @intToFloat(f32,p.buffer.len-1);
+            }
+    }
+    fn reverseIt(p:*Sound)void{
+        p.reverse = !p.reverse;
+        if (!p.reverse){
+                p.posf = 0;
+            }else{
+                p.posf = @intToFloat(f32,p.buffer.len-1);
+            }
+    }
 };
-
-fn unloadSound(index: usize)void{
-    sounds[index].loaded = false;
-    sounds[index].aloc.free(sounds[index].buffer);
-    sounds[index].buffer = &[_]f32{};
-
-}
-
-fn loadSound(aloc: std.mem.Allocator, index: usize, sample: *[]f32)void{
-    sounds[index].buffer = sample.*;
-    sounds[index].play = false;
-    sounds[index].reverse = false;
-    sounds[index].loop = false;    
-    sounds[index].pitch = 1;
-    sounds[index].loaded = true;
-    sounds[index].aloc = aloc;
-    //sounds[index].pitch = pitchSemis(-2);
-}
 
 fn pitchSemis(pitch: i64)f32{
     const pitchstep = 1.05946;
@@ -82,28 +123,8 @@ fn pitchSemis(pitch: i64)f32{
 
 fn mix()f32{   
     var sample:f32 = 0.0;
-    for (sounds) |p,i|{
-        if (p.loaded and p.play){
-            var pos = @floatToInt(usize,p.posf);
-            const ende = @intToFloat(f32,p.buffer.len-1);
-            if(p.posf > ende and !p.reverse){
-                sounds[i].posf = p.posf-ende;
-                pos = @floatToInt(usize,sounds[i].posf);
-                if(!p.loop)sounds[i].play=false;
-            }else if (p.posf <= 0.0 and p.reverse){
-                sounds[i].posf = @intToFloat(f32,(p.buffer.len-1))-(0.0-p.posf);
-                pos = @floatToInt(usize,sounds[i].posf);
-                if(!p.loop)sounds[i].play=false;
-            }
-
-            sample += p.buffer[pos];
-            
-            if (!p.reverse){
-                sounds[i].posf +=  p.pitch;
-            }else{
-                sounds[i].posf -= p.pitch;
-            }
-        }
+    for (sampler.sounds) |*p|{
+        sample += p.next();  
     }
     if (sample > 1){
         sample = 1;
@@ -112,62 +133,10 @@ fn mix()f32{
     }
     return sample*0.8;
 }
-fn chaneLPFFreq()void{
+
+fn change_lpf_freq()void{
     lpfConf.cutoffFrequency +=100;
     _= ma.ma_lpf_reinit(&lpfConf, &lpf);
-}
-
-fn sndio_audio_callback(maybe_outstream: ?[*]c.SoundIoOutStream, frame_count_min: c_int, frame_count_max: c_int) callconv(.C) void {
-    _ = frame_count_min;
-    const outstream = @ptrCast(*c.SoundIoOutStream, maybe_outstream);
-    const layout = &outstream.layout;
-    var frames_left = frame_count_max;
-
-    while (frames_left > 0) {
-        var frame_count = frames_left;
-        var areas: [*]c.SoundIoChannelArea = undefined;
-        sio_err(c.soundio_outstream_begin_write(maybe_outstream, @ptrCast([*]?[*]c.SoundIoChannelArea, &areas), &frame_count)) catch |err| std.debug.panic("write failed: {s}", .{@errorName(err)});
-        if (frame_count == 0) break;
-        var frame: c_int = 0;
-        while (frame < frame_count) : (frame += 1) {
-            {
-                var channel: usize = 0;
-                while (channel < @intCast(usize, layout.channel_count)) : (channel += 1) {
-                    const sample = mix();
-
-                    const channel_ptr = areas[channel].ptr;
-                    const sample_ptr = &channel_ptr[@intCast(usize, areas[channel].step * frame)];
-                    @ptrCast(*f32, @alignCast(@alignOf(f32), sample_ptr)).* = sample;
-                }
-            }
-        }
-        sio_err(c.soundio_outstream_end_write(maybe_outstream)) catch |err| std.debug.panic("end write failed: {s}", .{@errorName(err)});
-        frames_left -= frame_count;
-    }
-}
-fn sndio_init_audio()!void{
-    const soundio = c.soundio_create();
-    defer c.soundio_destroy(soundio);
-    try sio_err(c.soundio_connect(soundio));
-    c.soundio_flush_events(soundio);
-
-    const default_output_index = c.soundio_default_output_device_index(soundio);
-    if (default_output_index < 0) return error.NoOutputDeviceFound;
-
-    const device = c.soundio_get_output_device(soundio, default_output_index) orelse return error.OutOfMemory;
-    defer c.soundio_device_unref(device);
-
-    std.debug.print("Output device: {s}\n", .{device.*.name});
-    const outstream = c.soundio_outstream_create(device) orelse return error.OutOfMemory;
-    outstream.*.sample_rate = 44100;
-    defer c.soundio_outstream_destroy(outstream);
-    outstream.*.format = c.SoundIoFormatFloat32NE;
-    outstream.*.write_callback = sndio_audio_callback;
-    std.debug.print("Output Samplerate: {d}hz\n", .{outstream.*.sample_rate});
-
-    try sio_err(c.soundio_outstream_open(outstream));
-    try sio_err(c.soundio_outstream_start(outstream));
-    while (!exit) c.soundio_wait_events(soundio);
 }
 
 fn ma_create_lowpass(alloc:std.mem.Allocator)!void{       
@@ -263,25 +232,6 @@ fn ma_load_file(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     return &mybuffer;
 }
 
-fn snd_load_file(allocator:std.mem.Allocator,inFileName: []const u8) !*[]f32{
-    var sndFileInfo = try std.heap.c_allocator.create(Info);
-    defer std.heap.c_allocator.destroy(sndFileInfo);
-
-    var sndFileInfoPtr = @ptrCast([*c] sf.SF_INFO, sndFileInfo);
-    const inFile = sf.sf_open(inFileName.ptr, sf.SFM_READ, sndFileInfoPtr);
-    defer _ =sf.sf_close(inFile);
-    std.debug.print("Frames / Channels: {d} / {d}\n", .{sndFileInfo.frames,sndFileInfo.channels});
-
-    var mybuffer: []f32 = undefined;
-    const arrayLen = @intCast(usize, sndFileInfo.frames*sndFileInfo.channels);
-    mybuffer = try allocator.alloc(f32, arrayLen);
-    std.debug.print("Samples allocated: {d} / {d}\n", .{arrayLen,mybuffer.len});
-
-    const read = sf.sf_readf_float(inFile, mybuffer.ptr, sndFileInfo.frames) ;
-    std.debug.print("Frames read:{d}\n", .{read});
-    return &mybuffer;
-}
-
 // TODO:This loop takes 33M in memory???
 fn drawWindow() void {
     const screenWidth = 450;
@@ -297,36 +247,40 @@ fn drawWindow() void {
         const iy = @intToFloat(f32,50 + (i/4)*10+(i/4)*100);
         b.* = ray.Rectangle{ .x=ix, .y=iy, .width=100, .height=100 };
     }
+
     var btn_colors : [16]ray.Color= undefined;
     for (btn_colors) |*b|{
         b.* = ray.GREEN;
     }
-    const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Y,ray.KEY_X,ray.KEY_C,ray.KEY_V};
+    const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Z,ray.KEY_X,ray.KEY_C,ray.KEY_V};
 
     while (!ray.WindowShouldClose()) {
         var mousePosition = ray.GetMousePosition();
 
         for (keys)|k,i|{
             if (ray.IsKeyPressed(k)){
-                sounds[i].play = true;
+                sampler.sounds[i].playIt();
+                sampler.selectedSound = i;
                 btn_colors[i]=ray.ORANGE;
             }
             if (ray.IsKeyReleased(k)){
-                sounds[i].play = false;
-                sounds[i].posf =0;
+                sampler.sounds[i].stopIt();
                 btn_colors[i]=ray.GREEN;
             }
         }
+        if (ray.IsKeyPressed(ray.KEY_P)){
+                sampler.reverseSound();
+        }
+        
         
         for (buttons) |*b,i|{
             if (ray.WrapCheckCollisionPointRec(&mousePosition, b)){
                 if (ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)){
-                    sounds[i].play = true;
+                    sampler.sounds[i].playIt();
                     btn_colors[i]=ray.ORANGE;
                 }
                 if (ray.IsMouseButtonReleased(ray.MOUSE_BUTTON_LEFT)){
-                    sounds[i].play = false;
-                    sounds[i].posf =0;
+                    sampler.sounds[i].stopIt();
                     btn_colors[i]=ray.GREEN;
                 }
             }
@@ -348,8 +302,12 @@ pub fn main() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
     try loadCmdLineArgSamples(alloc);
+    std.debug.print("Sampler: {s}\n", .{sampler});
     try ma_create_lowpass(alloc);
     const audioThread = try std.Thread.spawn(.{}, ma_init_audio, .{});
+    //sndio.mix = mix;
+    //sndio.exit = shouldExit;
+    //const audioThread = try std.Thread.spawn(.{},sndio.start_audio, .{});
     
     //TODO: just for now.. ui can't load samples
     _ = try std.Thread.spawn(.{}, userInput, .{});
@@ -363,27 +321,18 @@ fn loadCmdLineArgSamples(alloc:std.mem.Allocator)!void{
     // skip my own exe name
     _ = args.skip();
     
-    var i:usize = 0;
     while (true){
         const arg1 = (try args.next(alloc) orelse {
             break;
-        });
+        });   
         var sndAloc = std.heap.page_allocator;
         var b = try ma_load_file(sndAloc,arg1);
-        loadSound(sndAloc,i,b);
-        i+=1;
+        sampler.load(sndAloc,b);
     }
 }
 
 fn userInput()!void{ 
     while (true){
-        var i:usize = 0;
-        for (sounds) |sound,x|{
-            if (!sound.loaded){
-                i=x;
-                break;
-            }
-        }
         var buf: [1000]u8 = undefined;
         // We need a 0 terminated string... how unpleasant
         for (buf) |_,ii| buf[ii] = 0;
@@ -392,8 +341,7 @@ fn userInput()!void{
             var sndAloc = std.heap.page_allocator;
             const bla:[]u8 = user_input;
             if(ma_load_file(sndAloc,bla))|b|{
-                loadSound(sndAloc,i,b);
-                i+=1;
+                sampler.load(sndAloc,b);
             }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
             }
