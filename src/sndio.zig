@@ -38,7 +38,7 @@ fn audio_callback(maybe_outstream: ?[*]c.SoundIoOutStream, frame_count_min: c_in
     }
 }
 
-pub fn start_audio()!void{
+pub fn startAudio()!void{
     const soundio = c.soundio_create();
     defer c.soundio_destroy(soundio);
     try sio_err(c.soundio_connect(soundio));

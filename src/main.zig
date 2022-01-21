@@ -167,27 +167,11 @@ fn drawWindow() void {
         b.* = ray.GREEN;
     }
     const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Z,ray.KEY_X,ray.KEY_C,ray.KEY_V};
+    var textBox = ray.Rectangle{ .x=230, .y=5, .width=210, .height=25 };
+    var dt = "testdata/drum.wav";
 
     while (!ray.WindowShouldClose()) {
         var mousePosition = ray.GetMousePosition();
-
-        for (keys)|k,i|{
-            if (ray.IsKeyPressed(k)){
-                sampler.play(i);
-                btn_colors[i]=ray.ORANGE;
-            }
-            if (ray.IsKeyReleased(k)){
-                sampler.sounds[i].stop();
-                btn_colors[i]=ray.GREEN;
-            }
-        }
-        if (ray.IsKeyPressed(ray.KEY_P)){
-                sampler.reverseSound();
-        }
-        if (ray.IsKeyPressed(ray.KEY_L)){
-                sampler.loopSound();
-        }
-        
         for (buttons) |*b,i|{
             if (ray.WrapCheckCollisionPointRec(&mousePosition, b)){
                 if (ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)){
@@ -200,11 +184,34 @@ fn drawWindow() void {
                 }
             }
         }
+        if (ray.WrapCheckCollisionPointRec(&mousePosition, &textBox)){
+            ray.SetMouseCursor(ray.MOUSE_CURSOR_IBEAM);
+        }else{
+            for (keys)|k,i|{
+                if (ray.IsKeyPressed(k)){
+                    sampler.play(i);
+                    btn_colors[i]=ray.ORANGE;
+                }
+                if (ray.IsKeyReleased(k)){
+                    sampler.sounds[i].stop();
+                    btn_colors[i]=ray.GREEN;
+                }
+            }
+            if (ray.IsKeyPressed(ray.KEY_P)){
+                sampler.reverseSound();
+            }
+            if (ray.IsKeyPressed(ray.KEY_L)){
+                sampler.loopSound();
+            }
+        }
         ray.BeginDrawing();
         defer ray.EndDrawing();
 
         ray.ClearBackground(ray.RAYWHITE);
         ray.DrawText("Press a button to playing a sound", 10, 10, 5, ray.BLACK);
+        ray.DrawText("Enter a sample name,and click ->", 10, 20, 5, ray.BLACK);
+        ray.WrapDrawRectangleRec(&textBox, ray.GRAY);
+        ray.DrawText(dt, @floatToInt(c_int,textBox.x) + 5, @floatToInt(c_int,textBox.y) + 8, 15, ray.MAROON);
         for (buttons) |*b,i|{
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
@@ -219,13 +226,13 @@ pub fn main() !void {
     const alloc = arena.allocator();
     try loadCmdLineArgSamples(alloc);
     std.debug.print("Sampler: {s}\n", .{sampler});
-    try ma.ma_create_lowpass(alloc);
+    try ma.createLowpass(alloc);
     ma.mix = mix;
     ma.exit = shouldExit;
-    const audioThread = try std.Thread.spawn(.{}, ma.ma_init_audio, .{});
+    const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});
     //sndio.mix = mix;
     //sndio.exit = shouldExit;
-    //const audioThread = try std.Thread.spawn(.{},sndio.start_audio, .{});
+    //const audioThread = try std.Thread.spawn(.{},sndio.startAudio, .{});
     
     //TODO: just for now.. ui can't load samples
     _ = try std.Thread.spawn(.{}, userInput, .{});
@@ -238,13 +245,12 @@ fn loadCmdLineArgSamples(alloc:std.mem.Allocator)!void{
     var args = process.args();
     // skip my own exe name
     _ = args.skip();
-    
     while (true){
         const arg1 = (try args.next(alloc) orelse {
             break;
         });   
         var sndAloc = std.heap.page_allocator;
-        var b = try ma.ma_load_file(sndAloc,arg1);
+        var b = try ma.loadAudioFile(sndAloc,arg1);
         sampler.load(b);
     }
 }
@@ -258,7 +264,7 @@ fn userInput()!void{
         if (try stdin.readUntilDelimiterOrEof(buf[0..], '\n')) |user_input| {
             var sndAloc = std.heap.page_allocator;
             const bla:[]u8 = user_input;
-            if(ma.ma_load_file(sndAloc,bla))|b|{
+            if(ma.loadAudioFile(sndAloc,bla))|b|{
                 sampler.load(b);
             }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});

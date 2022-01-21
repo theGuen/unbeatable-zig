@@ -9,7 +9,7 @@ const Info = extern struct {
     sections: c_int,
     seekable: c_int,
 };
-pub fn snd_load_file(allocator:std.mem.Allocator,inFileName: []const u8) !*[]f32{
+pub fn loadAudioFile(allocator:std.mem.Allocator,inFileName: []const u8) !*[]f32{
     var sndFileInfo = try std.heap.c_allocator.create(Info);
     defer std.heap.c_allocator.destroy(sndFileInfo);
 

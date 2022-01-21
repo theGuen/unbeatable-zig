@@ -1,4 +1,3 @@
-
 const std = @import("std");
 const ma = @cImport(@cInclude("miniaudio.h"));
 pub var mix: fn () f32 = undefined;
@@ -7,12 +6,12 @@ pub var exit: fn () bool = undefined;
 var lpf:ma.ma_lpf = undefined;
 var lpfConf:ma.ma_lpf_config = undefined;
 
-pub fn change_lpf_freq()void{
+pub fn lpfFreq()void{
     lpfConf.cutoffFrequency +=100;
     _= ma.ma_lpf_reinit(&lpfConf, &lpf);
 }
 
-pub fn ma_create_lowpass(alloc:std.mem.Allocator)!void{       
+pub fn createLowpass(alloc:std.mem.Allocator)!void{       
     lpf = std.mem.zeroes(ma.ma_lpf);
     var heapSizeInBytes:usize = 1;
     lpfConf = ma.ma_lpf_config_init(ma.ma_format_f32, 2, 44100, 1024, 4);
@@ -32,16 +31,7 @@ pub fn ma_create_lowpass(alloc:std.mem.Allocator)!void{
     
 }
 
-pub fn ma_add_lowpass(out: [*c]f32,in: [*c]f32,frame_count: ma.ma_uint32)void{
-
-    var r = ma.ma_lpf_process_pcm_frames(&lpf, out, in, frame_count); 
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_process_pcm_frames failed:{d}\n",.{r});
-    }
-
-}
-
-pub fn ma_load_file(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
+pub fn loadAudioFile(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     var decoder = std.mem.zeroes(ma.ma_decoder);
     var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, 44100);
     var r = ma.ma_decoder_init_file(inFileName.ptr, &config, &decoder);
@@ -70,20 +60,30 @@ pub fn ma_load_file(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     return &mybuffer;
 }
 
-fn ma_audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
+fn ma_add_lowpass(out: [*c]f32,in: [*c]f32,frame_count: ma.ma_uint32)void{
+
+    var r = ma.ma_lpf_process_pcm_frames(&lpf, out, in, frame_count); 
+    if (r != ma.MA_SUCCESS) {
+        std.debug.print("ma_lpf_process_pcm_frames failed:{d}\n",.{r});
+    }
+
+}
+
+fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
     _ = input;
     _ = device;
     var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
     for (outw[0..frame_count*2]) |*b| b.* = mix();
     ma_add_lowpass(outw,outw,frame_count);
 }
-pub fn ma_init_audio()!void{
+
+pub fn startAudio()!void{
     var device = std.mem.zeroes(ma.ma_device);
     var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_playback);
     deviceConfig.playback.format   = ma.ma_format_f32;
     deviceConfig.playback.channels = 2;
     deviceConfig.sampleRate        = 44100;
-    deviceConfig.dataCallback      = ma_audio_callback;
+    deviceConfig.dataCallback      = audio_callback;
     deviceConfig.pUserData         = null;
     var r = ma.ma_device_init(null, &deviceConfig, &device);
     if (r != ma.MA_SUCCESS) {
