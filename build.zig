@@ -25,6 +25,7 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutable("unbeatable-zig", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
     exe.addIncludeDir("/opt/homebrew/include");
     exe.addLibPath("/opt/homebrew/lib");
     exe.linkSystemLibrary("soundio");
