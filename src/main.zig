@@ -23,13 +23,23 @@ const Sampler = struct{
         var sound:*Sound = &self.sounds[self.selectedSound];
         //seems whe have to free the pointer last....
         var b = sound.buffer;
+        defer self.alloc.free(b);
+        
         sound.buffer = sample.*;
         sound.posf = 0;
         sound.reversed = false;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
         self.selectedSound += 1;
-        if(b.len>0){
-            self.alloc.free(b);
+        
+    }
+    fn freeAll(self: *Sampler)void{
+        for (self.sounds) |*s|{
+            var b = s.buffer;
+            defer self.alloc.free(b);
+
+            s.playing =false;
+            s.posf = 0;
+            s.buffer = &[_]f32{};
         }
     }
     fn play(self: *Sampler,soundIndex:usize)void{
@@ -147,7 +157,8 @@ fn mix()f32{
 }
 
 // TODO:This loop takes 33M in memory???
-fn drawWindow() !void {
+// TODO: Pass the sampler
+fn drawWindow(samplers:*Sampler) !void {
     const screenWidth = 450;
     const screenHeight = 500;
 
@@ -168,7 +179,9 @@ fn drawWindow() !void {
     }
     const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Z,ray.KEY_X,ray.KEY_C,ray.KEY_V};
     var textBox = ray.Rectangle{ .x=230, .y=5, .width=210, .height=25 };
+    //TODO: use another allocator
     var dta = std.heap.page_allocator.alloc(u8, 256)catch |err| std.debug.panic("write failed: {s}", .{@errorName(err)});
+    defer std.heap.page_allocator.free(dta);
     dta[0]=0;
     for (dta[0..255]) |*b| b.* = 0;
     var dt = @ptrCast([*c]u8,dta);
@@ -180,11 +193,11 @@ fn drawWindow() !void {
         for (buttons) |*b,i|{
             if (ray.WrapCheckCollisionPointRec(&mousePosition, b)){
                 if (ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)){
-                    sampler.play(i);
+                    samplers.play(i);
                     btn_colors[i]=ray.ORANGE;
                 }
                 if (ray.IsMouseButtonReleased(ray.MOUSE_BUTTON_LEFT)){
-                    sampler.sounds[i].stop();
+                    samplers.sounds[i].stop();
                     btn_colors[i]=ray.GREEN;
                 }
             }
@@ -208,9 +221,8 @@ fn drawWindow() !void {
             }
             if (ray.IsKeyPressed(ray.KEY_ENTER)){
                 if (dta[0] != 0){
-                    var sndAloc = std.heap.page_allocator;
-                    if(ma.loadAudioFile(sndAloc,dta))|b|{
-                        sampler.load(b);
+                    if(ma.loadAudioFile(sampler.alloc,dta))|b|{
+                        samplers.load(b);
                         for (dta[0..255]) |*x| x.* = 0;
                         letterCount = 0;
                     }else |err|{
@@ -222,19 +234,19 @@ fn drawWindow() !void {
             onText = false;
             for (keys)|k,i|{
                 if (ray.IsKeyPressed(k)){
-                    sampler.play(i);
+                    samplers.play(i);
                     btn_colors[i]=ray.ORANGE;
                 }
                 if (ray.IsKeyReleased(k)){
-                    sampler.sounds[i].stop();
+                    samplers.sounds[i].stop();
                     btn_colors[i]=ray.GREEN;
                 }
             }
             if (ray.IsKeyPressed(ray.KEY_P)){
-                sampler.reverseSound();
+                samplers.reverseSound();
             }
             if (ray.IsKeyPressed(ray.KEY_L)){
-                sampler.loopSound();
+                samplers.loopSound();
             }
         }
         ray.BeginDrawing();
@@ -261,24 +273,28 @@ fn drawWindow() !void {
 }
 
 pub fn main() !void {
-    sampler = initSampler(std.heap.page_allocator); 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    defer std.debug.assert(!general_purpose_allocator.deinit());
+
+    const alloc = general_purpose_allocator.allocator();
+    sampler = initSampler(alloc); 
+    defer sampler.freeAll();
+
     try loadCmdLineArgSamples(alloc);
-    std.debug.print("Sampler: {s}\n", .{sampler});
+    std.debug.print("Sampler: {s}\n", .{&sampler});
+
     try ma.createLowpass(alloc);
+    //TODO:ugly to pass an allocator to free
+    defer ma.destroyLowPass(alloc);
+
     ma.mix = mix;
     ma.exit = shouldExit;
     const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});
-    //sndio.mix = mix;
-    //sndio.exit = shouldExit;
-    //const audioThread = try std.Thread.spawn(.{},sndio.startAudio, .{});
     
     //TODO: just for now.. ui can't load samples
-    _ = try std.Thread.spawn(.{}, userInput, .{});
+    _ = try std.Thread.spawn(.{}, userInput, .{&sampler});
     //Loop forever
-    _ = try drawWindow();
+    _ = try drawWindow(&sampler);
     audioThread.join();
 }
 
@@ -290,23 +306,22 @@ fn loadCmdLineArgSamples(alloc:std.mem.Allocator)!void{
         const arg1 = (try args.next(alloc) orelse {
             break;
         });   
-        var sndAloc = std.heap.page_allocator;
-        var b = try ma.loadAudioFile(sndAloc,arg1);
+        var b = try ma.loadAudioFile(alloc,arg1);
         sampler.load(b);
+        alloc.free(arg1);
     }
 }
 
-fn userInput()!void{ 
+fn userInput(samplers:*Sampler)!void{ 
     while (true){
         var buf: [1000]u8 = undefined;
         // We need a 0 terminated string... how unpleasant
         for (buf) |_,ii| buf[ii] = 0;
         const stdin = std.io.getStdIn().reader();
         if (try stdin.readUntilDelimiterOrEof(buf[0..], '\n')) |user_input| {
-            var sndAloc = std.heap.page_allocator;
             const bla:[]u8 = user_input;
-            if(ma.loadAudioFile(sndAloc,bla))|b|{
-                sampler.load(b);
+            if(ma.loadAudioFile(samplers.alloc,bla))|b|{
+                samplers.load(b);
             }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
             }

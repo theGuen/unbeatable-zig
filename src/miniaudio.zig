@@ -5,10 +5,15 @@ pub var exit: fn () bool = undefined;
 
 var lpf:ma.ma_lpf = undefined;
 var lpfConf:ma.ma_lpf_config = undefined;
+var lpfBuf:[]u8 = undefined;
 
 pub fn lpfFreq()void{
     lpfConf.cutoffFrequency +=100;
     _= ma.ma_lpf_reinit(&lpfConf, &lpf);
+}
+
+pub fn destroyLowPass(alloc:std.mem.Allocator)void{
+    alloc.free(lpfBuf);
 }
 
 pub fn createLowpass(alloc:std.mem.Allocator)!void{       
@@ -21,8 +26,8 @@ pub fn createLowpass(alloc:std.mem.Allocator)!void{
     }
     
     std.debug.print("HERE\n",.{});
-    var buf = try alloc.alloc([]u8, heapSizeInBytes);
-    var bufPtr = @ptrCast(*anyopaque, buf);  
+    lpfBuf = try alloc.alloc(u8, heapSizeInBytes);
+    var bufPtr = @ptrCast(*anyopaque, lpfBuf);  
     r = ma.ma_lpf_init_preallocated(&lpfConf, bufPtr,&lpf);
     std.debug.print("HERE\n",.{});
     if (r != ma.MA_SUCCESS) {
