@@ -36,6 +36,22 @@ pub fn createLowpass(alloc:std.mem.Allocator)!void{
     
 }
 
+pub fn saveAudioFile(inFileName: []const u8,myBuffer:[]f32)!void{
+    
+    var buffer = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), myBuffer));
+    var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
+    var encoder = std.mem.zeroes(ma.ma_encoder);
+    var r  = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
+    defer ma.ma_encoder_uninit(&encoder);
+    if (r != ma.MA_SUCCESS) {
+        std.debug.print("Could not init encoder {s}: {d}\n",.{inFileName,r});
+        return  error.Unknown;
+    }
+    var pFramesWritten:usize = 0;
+    r =  ma.ma_encoder_write_pcm_frames(&encoder, buffer, myBuffer.len/2, &pFramesWritten);
+}
+
+
 pub fn loadAudioFile(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     var decoder = std.mem.zeroes(ma.ma_decoder);
     var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, 44100);

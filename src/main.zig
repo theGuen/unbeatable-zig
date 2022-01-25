@@ -68,6 +68,17 @@ fn initSampler(alloc: std.mem.Allocator)Sampler{
     return this;
 }
 
+const SamplerW = struct{
+    sounds: [16]SoundW
+};
+const SoundW = struct{
+    name : []u8,
+    looping :bool,
+    reversed: bool,
+    pitch :f32,
+    semis:i64
+};
+
 const Sound = struct{
     buffer: []f32,
     posf : f64,
@@ -280,8 +291,7 @@ pub fn main() !void {
     sampler = initSampler(alloc); 
     defer sampler.freeAll();
 
-    try loadCmdLineArgSamples(alloc);
-    std.debug.print("Sampler: {s}\n", .{&sampler});
+    //try loadCmdLineArgSamples(alloc);
 
     try ma.createLowpass(alloc);
     //TODO:ugly to pass an allocator to free
@@ -290,11 +300,16 @@ pub fn main() !void {
     ma.mix = mix;
     ma.exit = shouldExit;
     const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});
+
     
+    try loadSamplerConfig(alloc,&sampler);
+    
+
     //TODO: just for now.. ui can't load samples
     _ = try std.Thread.spawn(.{}, userInput, .{&sampler});
     //Loop forever
     _ = try drawWindow(&sampler);
+    try saveSamplerConfig(alloc);
     audioThread.join();
 }
 
@@ -327,4 +342,61 @@ fn userInput(samplers:*Sampler)!void{
             }
         }
     }
+}
+
+fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
+    std.fs.cwd().makeDir("project1") catch {};
+    const dir = try std.fs.cwd().openDir("project1",.{ .iterate = true });
+    var rfile = try dir.openFile("sampler_config.json", .{});
+    const body_content = try rfile.readToEndAlloc(alloc,std.math.maxInt(usize));
+    defer alloc.free(body_content);
+    defer rfile.close();
+
+    var tokenStream = std.json.TokenStream.init(body_content);
+    var newOne = try std.json.parse(SamplerW,&tokenStream,.{.allocator = alloc});
+    defer std.json.parseFree(SamplerW,newOne,.{.allocator = alloc});
+
+    for (samplers.sounds)|*snd,i|{
+        const newSound = newOne.sounds[i];
+
+        var str= try alloc.alloc(u8,newSound.name.len+1);
+        defer alloc.free(str);
+        str[newSound.name.len] = 0;
+        for (newSound.name) |c,ii| str[ii] = c;
+        if(ma.loadAudioFile(alloc,str))|b|{
+                samplers.load(b);
+            }else |err|{
+                std.debug.print("ERROR: {s}\n", .{@errorName(err)});
+            }
+        snd.looping = newSound.looping;
+        snd.reversed = newSound.reversed;
+        snd.pitch = newSound.pitch;
+        snd.semis = newSound.semis;
+    }
+}
+
+fn saveSamplerConfig(alloc:std.mem.Allocator)!void{
+    var arena = std.heap.ArenaAllocator.init(alloc);
+    defer arena.deinit();
+  
+    var sw:SamplerW = undefined;
+    for (sw.sounds)|*snd,i|{
+        const string = try std.fmt.allocPrint(arena.allocator(),"project1/snd_{d}.wav",.{i});
+        snd.name = string;
+        snd.looping = sampler.sounds[i].looping;
+        snd.reversed = sampler.sounds[i].reversed;
+        snd.pitch = sampler.sounds[i].pitch;
+        snd.semis = sampler.sounds[i].semis;
+        var str= try arena.allocator().alloc(u8,string.len+1);
+        str[string.len] = 0;
+        for (string) |c,ii| str[ii] = c;
+        try ma.saveAudioFile(str,sampler.sounds[i].buffer);
+    }
+    
+    std.fs.cwd().makeDir("project1") catch {};
+    const dir = try std.fs.cwd().openDir("project1",.{ .iterate = true });
+    var file = try dir.createFile("sampler_config.json", .{});
+    defer file.close();
+    const fw = file.writer();
+    std.json.stringify(sw,std.json.StringifyOptions{.whitespace = null},fw)catch return;
 }

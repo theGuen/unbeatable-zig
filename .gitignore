@@ -2,3 +2,4 @@ c_examples/
 .vscode/
 zig-cache/
 zig-out/
+project1/
