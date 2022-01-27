@@ -28,7 +28,7 @@ fn newState()State{
 pub const Menu = struct{
     alloc: std.mem.Allocator,
     sampler:*smplr.Sampler,
-    items:[7]Item,
+    items:[8]Item,
     _currentIndex:usize,
     pub fn next(self: *Menu)[*c]const u8{
         var item = &self.items[self._currentIndex];
@@ -200,6 +200,28 @@ fn currentmutegroup(self: *Item)[*c]const u8{
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
+fn enterpitch(self: *Item)[*c]const u8{
+    return currentpitch(self);
+}
+fn uppitch(self: *Item)[*c]const u8{
+    self.state.stateValInt = self.sampler.getSoundPitchSemis();
+    self.state.stateValInt +=1;
+    _ = self.sampler.setSoundPitchSemis(self.state.stateValInt);
+    return @ptrCast([*c]const u8, self.state.stateValStr );
+}
+fn downpitch(self: *Item)[*c]const u8{
+    self.state.stateValInt = self.sampler.getSoundPitchSemis();
+    self.state.stateValInt -=1;
+    _ = self.sampler.setSoundPitchSemis(self.state.stateValInt);
+    return @ptrCast([*c]const u8, self.state.stateValStr );
+}
+fn currentpitch(self: *Item)[*c]const u8{
+    self.state.stateValInt = self.sampler.getSoundPitchSemis();
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator,"pitch: {d}",.{self.state.stateValInt}) catch "";
+    return @ptrCast([*c]const u8, self.state.stateValStr);
+}
+
 
 pub fn initMenu(alloc: std.mem.Allocator,sampler:*smplr.Sampler)Menu{
     var menu:Menu = undefined;
@@ -275,6 +297,16 @@ pub fn initMenu(alloc: std.mem.Allocator,sampler:*smplr.Sampler)Menu{
         .up = upmutegroup,
         .down = downmutegroup,
         .current = currentmutegroup,
+    };
+    menu.items[7]=Item{
+        .sampler = sampler,
+        .name = @ptrCast([*c]const u8, "pitch"),
+        .active = false,
+        .state = newState(),
+        .enter = enterpitch,
+        .up = uppitch,
+        .down = downpitch,
+        .current = currentpitch,
     };
     return menu;
 }

@@ -72,11 +72,15 @@ pub const Sampler = struct{
     pub fn getSoundMutegroup(self: *Sampler)usize{
         return self.sounds[self.selectedSound].mutegroup;
     }
-    pub fn pitchSoundSemis(self: *Sampler,semisToPitch:i64)void{
-        self.sounds[self.selectedSound].pitchSemis= semisToPitch;
-        self.sounds[self.selectedSound].pitch= pitchSemis(semisToPitch);
+    pub fn setSoundPitchSemis(self: *Sampler,semis:i64)i64{
+        self.sounds[self.selectedSound].semis = semis;
+        self.sounds[self.selectedSound].pitch= pitchSemis(semis);
+        std.debug.print("pitch: {d}\n", .{pitchSemis(semis)});
+        return semis;
     }
-
+    pub fn getSoundPitchSemis(self: *Sampler)i64{
+        return self.sounds[self.selectedSound].semis;
+    }
 };
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
     var this = Sampler{.alloc = alloc,.selectedSound=0,.sounds=undefined};

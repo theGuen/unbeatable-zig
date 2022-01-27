@@ -130,12 +130,6 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
                     btn_colors[i]=ray.GREEN;
                 }
             }
-            if (ray.IsKeyPressed(ray.KEY_P)){
-                samplers.reverseSound();
-            }
-            if (ray.IsKeyPressed(ray.KEY_L)){
-                samplers.loopSound();
-            }
         }
         ray.BeginDrawing();
         defer ray.EndDrawing();
@@ -183,7 +177,7 @@ pub fn main() !void {
     try smplr.loadSamplerConfig(alloc,&sampler);
     
     //TODO: just for now.. ui can't load samples
-    _ = try std.Thread.spawn(.{}, h.userInput, .{&sampler});
+    //_ = try std.Thread.spawn(.{}, h.userInput, .{&sampler});
     //Loop forever
     _ = try drawWindow(&sampler);
     exit = true;
