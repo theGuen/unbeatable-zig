@@ -15,7 +15,10 @@ pub const Sampler = struct{
         
         sound.buffer = sample.*;
         sound.posf = 0;
+        sound.start = 0;
+        sound.end = @intToFloat(f64,sound.buffer.len-1);
         sound.reversed = false;
+        sound.mutegroup = self.selectedSound;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
         self.selectedSound += 1;
         
@@ -24,18 +27,25 @@ pub const Sampler = struct{
         for (self.sounds) |*s|{
             var b = s.buffer;
             defer self.alloc.free(b);
-
             s.playing =false;
             s.posf = 0;
+            s.start = 0;
+            s.end = 0;
             s.buffer = &[_]f32{};
         }
     }
     pub fn play(self: *Sampler,soundIndex:usize)void{
         self.selectedSound = soundIndex;
+        const mutegroup = self.sounds[soundIndex].mutegroup;
+        for (self.sounds) |*s,i|{
+            if(s.mutegroup == mutegroup){
+                self.sounds[i].stop(true);        
+            }
+        }
         self.sounds[soundIndex].play();
     }
     pub fn stop(self: *Sampler,soundIndex:usize)void{
-        self.sounds[soundIndex].stop();
+        self.sounds[soundIndex].stop(false);
     }
     pub fn reverseSound(self: *Sampler)void{
         self.sounds[self.selectedSound].reverse();
@@ -55,6 +65,13 @@ pub const Sampler = struct{
     pub fn isSoundGated(self: *Sampler)bool{
         return self.sounds[self.selectedSound].gated;
     }
+    pub fn setSoundMutegroup(self: *Sampler,mutegroup:usize)usize{
+        self.sounds[self.selectedSound].mutegroup = mutegroup;
+        return mutegroup;
+    }
+    pub fn getSoundMutegroup(self: *Sampler)usize{
+        return self.sounds[self.selectedSound].mutegroup;
+    }
     pub fn pitchSoundSemis(self: *Sampler,semisToPitch:i64)void{
         self.sounds[self.selectedSound].pitchSemis= semisToPitch;
         self.sounds[self.selectedSound].pitch= pitchSemis(semisToPitch);
@@ -66,12 +83,15 @@ pub fn initSampler(alloc: std.mem.Allocator)Sampler{
     for (this.sounds) |*s|{
         s.buffer = &[_]f32{}; 
         s.posf = 0;
+        s.start = 0;
+        s.end = 0;
         s.playing = false;
         s.looping = false;
         s.reversed = false;
         s.gated = false;
         s.pitch = 1;
         s.semis = 0;
+        s.mutegroup = 0;
     }
     return this;
 }
@@ -79,22 +99,26 @@ pub fn initSampler(alloc: std.mem.Allocator)Sampler{
 const Sound = struct{
     buffer: []f32,
     posf : f64,
+    start: f64,
+    end: f64,
     playing: bool,
     looping :bool,
     reversed: bool,
     gated: bool,
     pitch :f32,
     semis:i64,
+    mutegroup: usize,
     pub fn next(p:*Sound)f32{
         if (p.buffer.len >0 and p.playing){
             var pos = @floatToInt(i64,p.posf);
-            const ende = @intToFloat(f64,p.buffer.len-1);
+            const ende = p.end;
+            const start = p.start;
             if(p.posf > ende and !p.reversed){
                 p.posf = p.posf-ende;
                 pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
-            }else if (p.posf < 0.0 and p.reversed){
-                p.posf = @intToFloat(f64,(p.buffer.len-1))-(0.0-p.posf);
+            }else if (p.posf < start and p.reversed){
+                p.posf = ende-(start-p.posf);
                 pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
             }
@@ -109,24 +133,33 @@ const Sound = struct{
         }
     }
     fn play(p:*Sound)void{
-        p.playing = true;
+        if (!p.reversed){
+                p.posf = p.start;
+            }else{
+                p.posf = p.end;
+            }
+        if (p.playing and p.looping){
+            p.playing = false;
+        }else{
+            p.playing = true;
+        }
     }
-    fn stop(p:*Sound)void{
-        if (p.gated){
+    fn stop(p:*Sound,force:bool)void{
+        if (p.gated or force){
             p.playing = false;
             if (!p.reversed){
-                p.posf = 0;
+                p.posf = p.start;
             }else{
-                p.posf = @intToFloat(f64,p.buffer.len-1);
+                p.posf = p.end;
             }
         }
     }
     fn reverse(p:*Sound)void{
         p.reversed = !p.reversed;
         if (!p.reversed){
-                p.posf = 0;
+                p.posf = p.start;
             }else{
-                p.posf = @intToFloat(f64,p.buffer.len-1);
+                p.posf = p.end;
             }
     }
 };
@@ -137,22 +170,28 @@ const SamplerW = struct{
 };
 const SoundW = struct{
     name : []u8,
+    start: f64,
+    end: f64,
     looping :bool,
     reversed: bool,
     gated: bool,
     pitch :f32,
-    semis:i64
+    semis:i64,
+    mutegroup:usize,
 };
 const SamplerL = struct{
     sounds: [16]SoundL
 };
 const SoundL = struct{
     name : []u8,
+    start: f64,
+    end: f64,    
     looping :bool,
     reversed: bool,
     gated: bool,
     pitch :f32,
-    semis:i64
+    semis:i64,
+    mutegroup:usize,
 };
 
 fn pitchSemis(pitch: i64)f32{
@@ -187,6 +226,8 @@ pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
     defer rfile.close();
 
     var tokenStream = std.json.TokenStream.init(body_content);
+    //TODO: error: evaluation exceeded 1000 backwards branches...use @setEvalBranchQuota(BIG_NUMBER) before the call to parse to remove this error.
+    @setEvalBranchQuota(100000);
     var newOne = try std.json.parse(SamplerL,&tokenStream,.{.allocator = alloc});
     defer std.json.parseFree(SamplerL,newOne,.{.allocator = alloc});
 
@@ -199,14 +240,17 @@ pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
         for (newSound.name) |c,ii| str[ii] = c;
         if(ma.loadAudioFile(alloc,str))|b|{
                 samplers.load(b);
-            }else |err|{
+        }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
-            }
+        }
+        snd.start = newSound.start;
+        snd.end = newSound.end;
         snd.looping = newSound.looping;
         snd.reversed = newSound.reversed;
-        snd.reversed = newSound.gated;
+        snd.gated = newSound.gated;
         snd.pitch = newSound.pitch;
         snd.semis = newSound.semis;
+        snd.mutegroup = newSound.mutegroup;
     }
 }
 
@@ -218,11 +262,14 @@ pub fn saveSamplerConfig(alloc:std.mem.Allocator,sampler:*Sampler)!void{
     for (sw.sounds)|*snd,i|{
         const string = try std.fmt.allocPrint(arena.allocator(),"project1/snd_{d}.wav",.{i});
         snd.name = string;
+        snd.start = sampler.sounds[i].start;
+        snd.end = sampler.sounds[i].end;
         snd.looping = sampler.sounds[i].looping;
         snd.reversed = sampler.sounds[i].reversed;
         snd.gated = sampler.sounds[i].gated;
         snd.pitch = sampler.sounds[i].pitch;
         snd.semis = sampler.sounds[i].semis;
+        snd.mutegroup = sampler.sounds[i].mutegroup;
         var str= try arena.allocator().alloc(u8,string.len+1);
         str[string.len] = 0;
         for (string) |c,ii| str[ii] = c;
