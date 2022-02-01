@@ -1,39 +1,27 @@
 const std = @import("std");
 const ma = @cImport(@cInclude("miniaudio.h"));
+const mfx = @cImport(@cInclude("multifx1.h"));
+const ui = @import("UIGlue.zig");
 pub var mix: fn () f32 = undefined;
 pub var exit: fn () bool = undefined;
 
-var lpf:ma.ma_lpf = undefined;
-var lpfConf:ma.ma_lpf_config = undefined;
-var lpfBuf:[]u8 = undefined;
+pub var fx:[*c]mfx.mydsp = undefined;
 
-pub fn lpfFreq()void{
-    lpfConf.cutoffFrequency +=100;
-    _= ma.ma_lpf_reinit(&lpfConf, &lpf);
-}
+pub fn initDSP()![]ui.IMenuItem{
+    fx = mfx.newmydsp();
+    mfx.initmydsp(fx,44100);
 
-pub fn destroyLowPass(alloc:std.mem.Allocator)void{
-    alloc.free(lpfBuf);
-}
+    var uiGlue = try ui.newUIGlue();
+    var uiGlue_c = @ptrCast([*c]mfx.UIGlue,uiGlue);
+    mfx.buildUserInterfacemydsp(fx,uiGlue_c);
+    var iitems = try ui.MenuItemsFromUIGlue(uiGlue);
 
-pub fn createLowpass(alloc:std.mem.Allocator)!void{       
-    lpf = std.mem.zeroes(ma.ma_lpf);
-    var heapSizeInBytes:usize = 1;
-    lpfConf = ma.ma_lpf_config_init(ma.ma_format_f32, 2, 44100, 1024, 4);
-    var r = ma.ma_lpf_get_heap_size(&lpfConf, &heapSizeInBytes);
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_get_heap_size failed:{d}\n",.{r});
-    }
-    
-    std.debug.print("HERE\n",.{});
-    lpfBuf = try alloc.alloc(u8, heapSizeInBytes);
-    var bufPtr = @ptrCast(*anyopaque, lpfBuf);  
-    r = ma.ma_lpf_init_preallocated(&lpfConf, bufPtr,&lpf);
-    std.debug.print("HERE\n",.{});
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_init failed:{d}\n",.{r});
-    }
-    
+    //enable all effect :)
+    for(iitems)|*item|{
+        std.debug.print("IITEM:{s}\n",.{item.label()});
+        item.down();
+    }    
+    return iitems;
 }
 
 pub fn saveAudioFile(inFileName: []const u8,myBuffer:[]f32)!void{
@@ -50,7 +38,6 @@ pub fn saveAudioFile(inFileName: []const u8,myBuffer:[]f32)!void{
     var pFramesWritten:usize = 0;
     r =  ma.ma_encoder_write_pcm_frames(&encoder, buffer, myBuffer.len/2, &pFramesWritten);
 }
-
 
 pub fn loadAudioFile(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     var decoder = std.mem.zeroes(ma.ma_decoder);
@@ -81,21 +68,14 @@ pub fn loadAudioFile(alloc:std.mem.Allocator,inFileName: []const u8)!*[]f32{
     return &mybuffer;
 }
 
-fn ma_add_lowpass(out: [*c]f32,in: [*c]f32,frame_count: ma.ma_uint32)void{
-
-    var r = ma.ma_lpf_process_pcm_frames(&lpf, out, in, frame_count); 
-    if (r != ma.MA_SUCCESS) {
-        std.debug.print("ma_lpf_process_pcm_frames failed:{d}\n",.{r});
-    }
-
-}
-
 fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
     _ = input;
     _ = device;
     var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
     for (outw[0..frame_count*2]) |*b| b.* = mix();
-    ma_add_lowpass(outw,outw,frame_count);
+    //ma_add_lowpass(outw,outw,frame_count);
+    var cc:c_int = @intCast(c_int,frame_count*2);
+    mfx.computemydsp(fx, cc, outw, outw);
 }
 
 pub fn startAudio()!void{

@@ -83,6 +83,12 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
         if (ray.IsKeyPressed(ray.KEY_DOWN)){
             _= menu.next();
         }
+        if (ray.IsKeyPressed(ray.KEY_RIGHT)){
+            _= menu.right();
+        }
+        if (ray.IsKeyPressed(ray.KEY_LEFT)){
+            _= menu.left();
+        }        
         if (ray.IsKeyPressed(ray.KEY_ENTER)){
             _= menu.enter();
         }
@@ -154,6 +160,7 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
 }
 
 pub fn main() !void {
+    
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(!general_purpose_allocator.deinit());
 
@@ -161,14 +168,12 @@ pub fn main() !void {
 
     sampler = smplr.initSampler(alloc); 
     defer sampler.freeAll();
-    menu = mn.initMenu(alloc,&sampler);
-    defer mn.free(&menu);
+    
 
     //try loadCmdLineArgSamples(alloc);
-
-    try ma.createLowpass(alloc);
-    //TODO:ugly to pass an allocator to free
-    defer ma.destroyLowPass(alloc);
+    var mGroup = try ma.initDSP();
+    menu = try mn.initMenu(alloc,&sampler,mGroup);
+    defer mn.free(&menu);
 
     ma.mix = mix;
     ma.exit = shouldExit;
