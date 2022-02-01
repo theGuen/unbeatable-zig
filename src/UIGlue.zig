@@ -167,6 +167,7 @@ pub const MenuValue=struct{
         self.valuePtr.* = self.value;
     } 
 };
+
 pub const MenuItem = struct{
     label:[*c]const u8,
     active:bool,
