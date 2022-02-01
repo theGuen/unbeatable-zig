@@ -35,6 +35,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.addCSourceFile("miniaudio/split/miniaudio.c", &[_][]const u8{});
     exe.addIncludeDir("raylibwrapper");
     exe.addCSourceFile("raylibwrapper/raylibwrapper.c", &[_][]const u8{});
+    exe.addIncludeDir("multifx");
     exe.linkLibC();
     exe.install();
 
