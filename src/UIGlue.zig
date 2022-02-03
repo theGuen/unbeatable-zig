@@ -119,7 +119,7 @@ pub fn MenuItemsFromUIGlue(uiGlue:*UIGlue)![]IMenuItem{
     var tmp = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), uiGlue.*.uiInterface));
     const gCount = tmp.count;
     var items:[]MenuItem = try std.heap.page_allocator.alloc(MenuItem,gCount);
-    var iitems:[]IMenuItem = try std.heap.page_allocator.alloc(IMenuItem,gCount);    
+    var iitems:[]IMenuItem = try std.heap.page_allocator.alloc(IMenuItem,gCount+1);    
     for(items)|*item,i|{
         item.label = tmp.items[i].label;
         item.valueStr = "";
@@ -138,6 +138,8 @@ pub fn MenuItemsFromUIGlue(uiGlue:*UIGlue)![]IMenuItem{
         }
         iitems[i]=item.iMenuItem();
     }
+    //TODO: dirrty hack sampler menu will be added at 0 
+    iitems[iitems.len-1]=iitems[0];
     return iitems;
 }
 

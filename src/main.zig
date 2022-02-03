@@ -62,6 +62,7 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
     var dt = @ptrCast([*c]u8,dta);
     var letterCount:usize = 0;
     var onText = false;
+    var currentPad:usize = 0;
 
     while (!ray.WindowShouldClose()) {
         var mousePosition = ray.GetMousePosition();
@@ -70,6 +71,7 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
                 if (ray.IsMouseButtonPressed(ray.MOUSE_BUTTON_LEFT)){
                     samplers.play(i);
                     btn_colors[i]=ray.ORANGE;
+                    currentPad = i;
                 }
                 if (ray.IsMouseButtonReleased(ray.MOUSE_BUTTON_LEFT)){
                     samplers.stop(i);
@@ -116,7 +118,7 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
             if (ray.IsKeyPressed(ray.KEY_ENTER)){
                 if (dta[0] != 0){
                     if(ma.loadAudioFile(sampler.alloc,dta))|b|{
-                        samplers.load(b);
+                        samplers.load(b,currentPad);
                         for (dta[0..255]) |*x| x.* = 0;
                         letterCount = 0;
                     }else |err|{
@@ -130,6 +132,7 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
                 if (ray.IsKeyPressed(k)){
                     samplers.play(i);
                     btn_colors[i]=ray.ORANGE;
+                    currentPad=i;
                 }
                 if (ray.IsKeyReleased(k)){
                     samplers.stop(i);
@@ -169,12 +172,11 @@ pub fn main() !void {
     sampler = smplr.initSampler(alloc); 
     defer sampler.freeAll();
     
-
     //try loadCmdLineArgSamples(alloc);
     var mGroup = try ma.initDSP();
     menu = try mn.initMenu(alloc,&sampler,mGroup);
     defer mn.free(&menu);
-
+    ma.allocator = alloc;
     ma.mix = mix;
     ma.exit = shouldExit;
     const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});

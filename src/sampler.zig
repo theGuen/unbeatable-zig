@@ -7,7 +7,8 @@ pub const Sampler = struct{
     alloc: std.mem.Allocator,
     selectedSound: usize,
     sounds: [16]Sound,
-    pub fn load(self: *Sampler, sample: *[]f32)void{
+    pub fn load(self: *Sampler, sample: *[]f32,padNum: usize )void{
+        self.selectedSound = padNum;
         var sound:*Sound = &self.sounds[self.selectedSound];
         //seems whe have to free the pointer last....
         var b = sound.buffer;
@@ -20,8 +21,6 @@ pub const Sampler = struct{
         sound.reversed = false;
         sound.mutegroup = self.selectedSound;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
-        self.selectedSound += 1;
-        
     }
     pub fn freeAll(self: *Sampler)void{
         for (self.sounds) |*s|{
@@ -38,7 +37,7 @@ pub const Sampler = struct{
         self.selectedSound = soundIndex;
         const mutegroup = self.sounds[soundIndex].mutegroup;
         for (self.sounds) |*s,i|{
-            if(s.mutegroup == mutegroup){
+            if(s.mutegroup == mutegroup and i != soundIndex){
                 self.sounds[i].stop(true);        
             }
         }
@@ -80,6 +79,26 @@ pub const Sampler = struct{
     }
     pub fn getSoundPitchSemis(self: *Sampler)i64{
         return self.sounds[self.selectedSound].semis;
+    }
+    pub fn setSoundStart(self: *Sampler,start:i64)i64{
+        self.sounds[self.selectedSound].start = @intToFloat(f64,@divTrunc(start,2)*2);
+        return start;
+    }
+    pub fn getSoundStart(self: *Sampler)i64{
+        return @floatToInt(i64,self.sounds[self.selectedSound].start);
+    }
+    pub fn setSoundEnd(self: *Sampler,end:i64)i64{
+        var sound = &self.sounds[self.selectedSound];
+        sound.end = @intToFloat(f64,@divTrunc(end,2)*2);
+        return end;
+    }
+    pub fn getSoundEnd(self: *Sampler)i64{
+        return @floatToInt(i64,self.sounds[self.selectedSound].end);
+    }
+    pub fn getSoundSize(self: *Sampler)usize{
+        var size = self.sounds[self.selectedSound].buffer.len;
+        if(size > 0)size = size -1;
+        return size;
     }
 };
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
@@ -139,9 +158,9 @@ const Sound = struct{
     fn play(p:*Sound)void{
         if (!p.reversed){
                 p.posf = p.start;
-            }else{
-                p.posf = p.end;
-            }
+        }else{
+            p.posf = p.end;
+        }
         if (p.playing and p.looping){
             p.playing = false;
         }else{
@@ -243,7 +262,7 @@ pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
         str[newSound.name.len] = 0;
         for (newSound.name) |c,ii| str[ii] = c;
         if(ma.loadAudioFile(alloc,str))|b|{
-                samplers.load(b);
+                samplers.load(b,i);
         }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
         }
