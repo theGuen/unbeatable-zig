@@ -2,12 +2,14 @@ const std = @import("std");
 const ma = @cImport(@cInclude("miniaudio.h"));
 const mfx = @cImport(@cInclude("multifx1.h"));
 const ui = @import("UIGlue.zig");
+const rcdr = @import("recorder.zig");
+
 pub var mix: fn () f32 = undefined;
 pub var exit: fn () bool = undefined;
 pub var allocator: std.mem.Allocator = undefined;
 
 pub var fx:[*c]mfx.mydsp = undefined;
-var list:std.ArrayList([]f32) = undefined;
+pub var recorder:*rcdr.Recorder = undefined;
 
 pub fn initDSP()![]ui.IMenuItem{
     fx = mfx.newmydsp();
@@ -34,7 +36,7 @@ pub fn saveAudioFile(inFileName: []const u8,myBuffer:[]f32)!void{
     r =  ma.ma_encoder_write_pcm_frames(&encoder, buffer, myBuffer.len/2, &pFramesWritten);
 }
 
-pub fn saveRecordedFile(inFileName: []const u8,)!void{
+pub fn saveRecordedFile(inFileName: []const u8,list:std.ArrayList([]f32))!void{
     var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
     var encoder = std.mem.zeroes(ma.ma_encoder);
     var r  = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
@@ -92,12 +94,13 @@ fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyop
     const l = @intCast(usize,frame_count*2);
     var rb = allocator.alloc(f32,l) catch return {};
     for (outw[0..frame_count*2])|_,i| rb[i] = outw[i];
-    list.append(rb)catch return {};
+    recorder.appendToRecord(rb);
 }
 
 pub fn startAudio()!void{
-    list = std.ArrayList([]f32).init(allocator);
-    defer list.deinit();
+    //list = std.ArrayList([]f32).init(allocator);
+    //defer list.deinit();
+
     var device = std.mem.zeroes(ma.ma_device);
     var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_playback);
     deviceConfig.playback.format   = ma.ma_format_f32;
@@ -121,5 +124,5 @@ pub fn startAudio()!void{
     std.debug.print("Device internal channels:{d}\n",.{device.playback.internalChannels});
     while (!exit()){}
     
-    try saveRecordedFile("record.wav");
+    //try saveRecordedFile("record.wav");
 }

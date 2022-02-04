@@ -9,6 +9,7 @@ const ma = @import("miniaudio.zig");
 const mn = @import("menu.zig");
 const h = @import("helper.zig");
 const smplr = @import("sampler.zig");
+const rcdr = @import("recorder.zig");
 
 var exit = false;
 fn shouldExit()bool{
@@ -171,15 +172,19 @@ pub fn main() !void {
 
     sampler = smplr.initSampler(alloc); 
     defer sampler.freeAll();
-    
+    var recorder = rcdr.newRecorder(alloc);
+
     //try loadCmdLineArgSamples(alloc);
     var mGroup = try ma.initDSP();
     menu = try mn.initMenu(alloc,&sampler,mGroup);
     defer mn.free(&menu);
+
+    ma.recorder = &recorder;
     ma.allocator = alloc;
     ma.mix = mix;
     ma.exit = shouldExit;
     const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});
+    //recorder.startRecording();
 
     try smplr.loadSamplerConfig(alloc,&sampler);
     
@@ -188,6 +193,9 @@ pub fn main() !void {
     //Loop forever
     _ = try drawWindow(&sampler);
     exit = true;
+    var recorded = recorder.stopRecording();
+    sampler.load(&recorded,15);
+
     try smplr.saveSamplerConfig(alloc,&sampler);
     audioThread.join();
 }
