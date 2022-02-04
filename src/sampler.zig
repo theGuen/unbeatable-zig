@@ -22,7 +22,7 @@ pub const Sampler = struct{
         sound.mutegroup = self.selectedSound;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
     }
-    pub fn freeAll(self: *Sampler)void{
+    pub fn deinit(self: *Sampler)void{
         for (self.sounds) |*s|{
             var b = s.buffer;
             defer self.alloc.free(b);

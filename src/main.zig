@@ -11,13 +11,8 @@ const h = @import("helper.zig");
 const smplr = @import("sampler.zig");
 const rcdr = @import("recorder.zig");
 
-var exit = false;
-fn shouldExit()bool{
-    return exit;
-}
 
 var sampler:smplr.Sampler = undefined;
-var menu:mn.Menu = undefined;
 
 // TODO: extract a mixer
 fn mix()f32{   
@@ -34,7 +29,7 @@ fn mix()f32{
 }
 
 // TODO:This loop takes 33M in memory???
-fn drawWindow(samplers:*smplr.Sampler) !void {
+fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
     const screenWidth = 450;
     const screenHeight = 500;
 
@@ -163,39 +158,40 @@ fn drawWindow(samplers:*smplr.Sampler) !void {
     }
 }
 
+fn asyncMain() void {
+    var frame = async ma.startAudio();
+    // this would be the return value of ma.startAudio()
+    const success = await frame;
+    _=success catch return {};
+}
+
 pub fn main() !void {
-    
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(!general_purpose_allocator.deinit());
-
     const alloc = general_purpose_allocator.allocator();
 
     sampler = smplr.initSampler(alloc); 
-    defer sampler.freeAll();
+    defer sampler.deinit();
+    try smplr.loadSamplerConfig(alloc,&sampler);
     var recorder = rcdr.newRecorder(alloc);
 
     //try loadCmdLineArgSamples(alloc);
-    var mGroup = try ma.initDSP();
-    menu = try mn.initMenu(alloc,&sampler,mGroup);
-    defer mn.free(&menu);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arenaAlloc = arena.allocator();
+    var fxMenuItems = try ma.init(alloc,arenaAlloc,mix,&recorder);
+    var menu:mn.Menu = try mn.initMenu(arenaAlloc,&sampler,fxMenuItems);
 
-    ma.recorder = &recorder;
-    ma.allocator = alloc;
-    ma.mix = mix;
-    ma.exit = shouldExit;
-    const audioThread = try std.Thread.spawn(.{}, ma.startAudio, .{});
+    _ = async asyncMain();
+
     //recorder.startRecording();
+    //loop forever
+    _ = try drawWindow(&sampler,&menu);
+    //var recorded = recorder.stopRecording();
+    //alloc.free(recorded);
 
-    try smplr.loadSamplerConfig(alloc,&sampler);
+    //sampler.load(&recorded,15);
+    //try smplr.saveSamplerConfig(alloc,&sampler);
     
-    //TODO: just for now.. ui can't load samples
-    //_ = try std.Thread.spawn(.{}, h.userInput, .{&sampler});
-    //Loop forever
-    _ = try drawWindow(&sampler);
-    exit = true;
-    var recorded = recorder.stopRecording();
-    sampler.load(&recorded,15);
-
-    try smplr.saveSamplerConfig(alloc,&sampler);
-    audioThread.join();
+    resume ma.startAudioFrame;
 }

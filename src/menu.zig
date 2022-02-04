@@ -342,9 +342,9 @@ pub const SamplerMenuItem = struct {
     }
 };
 
-fn buildSamplerMenu(sampler: *smplr.Sampler) ![]SamplerMenuItem {
-    var samplerMenuItem:[]SamplerMenuItem = try std.heap.page_allocator.alloc(SamplerMenuItem,1);
-    var menuValues:[]SamplerValue = try std.heap.page_allocator.alloc(SamplerValue,7);
+fn buildSamplerMenu(alloc: std.mem.Allocator,sampler: *smplr.Sampler) ![]SamplerMenuItem {
+    var samplerMenuItem:[]SamplerMenuItem = try alloc.alloc(SamplerMenuItem,1);
+    var menuValues:[]SamplerValue = try alloc.alloc(SamplerValue,7);
     menuValues[0] = SamplerValue{ .sampler = sampler, .label = "reverse", .increment=upreverse, .decrement=downreverse, .current=currentreverse, .state = newState() };
     menuValues[1] = SamplerValue{ .sampler = sampler, .label = "loop", .increment=uploop, .decrement=downloop, .current=currentloop, .state = newState()  };
     menuValues[2] = SamplerValue{ .sampler = sampler, .label = "gate", .increment=upgate, .decrement=downgate, .current=currentgate, .state = newState()  };
@@ -361,16 +361,16 @@ fn buildSamplerMenu(sampler: *smplr.Sampler) ![]SamplerMenuItem {
     return samplerMenuItem;
 }
 
-pub fn initMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler, gh: []ui.IMenuItem) !Menu {
-    var samplerMenu = try buildSamplerMenu(sampler);
-    gh[0]=samplerMenu[0].iMenuItem();
+pub fn initMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler, otherMenuItems: []ui.MenuItem) !Menu {
+    var samplerMenu = try buildSamplerMenu(alloc,sampler);
+    var iMenuItems:[]ui.IMenuItem = try alloc.alloc(ui.IMenuItem,otherMenuItems.len+1);
+    iMenuItems[0]=samplerMenu[0].iMenuItem();
+    for(otherMenuItems)|*omi,i|iMenuItems[i+1]=omi.iMenuItem();
     var menu: Menu = undefined;
     menu.alloc = alloc;
     menu._currentIndex = 0;
     menu.sampler = sampler;
-    menu.menuItems = gh;
+    menu.menuItems = iMenuItems;
     return menu;
 }
-pub fn free(menu: *Menu) void {
-    _=menu;
-}
+

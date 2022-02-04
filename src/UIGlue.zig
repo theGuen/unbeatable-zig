@@ -115,17 +115,16 @@ pub const GroupHolder = extern struct{
     items:[16]ItemGroup
 };
 
-pub fn MenuItemsFromUIGlue(uiGlue:*UIGlue)![]IMenuItem{
+pub fn MenuItemsFromUIGlue(alloc: std.mem.Allocator,uiGlue:*UIGlue)![]MenuItem{
     var tmp = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), uiGlue.*.uiInterface));
     const gCount = tmp.count;
-    var items:[]MenuItem = try std.heap.page_allocator.alloc(MenuItem,gCount);
-    var iitems:[]IMenuItem = try std.heap.page_allocator.alloc(IMenuItem,gCount+1);    
+    var items:[]MenuItem = try alloc.alloc(MenuItem,gCount);  
     for(items)|*item,i|{
         item.label = tmp.items[i].label;
         item.valueStr = "";
         item.selected = 0;
         const iCount = tmp.items[i].count;
-        item.menuValues = try std.heap.page_allocator.alloc(MenuValue,iCount);
+        item.menuValues = try alloc.alloc(MenuValue,iCount);
         for(item.menuValues)|*value,j|{
             value.label=tmp.items[i].items[j].label;
             value.toggle=tmp.items[i].items[j].toggle;
@@ -136,11 +135,8 @@ pub fn MenuItemsFromUIGlue(uiGlue:*UIGlue)![]IMenuItem{
             value.max=tmp.items[i].items[j].max;
             value.inc=tmp.items[i].items[j].inc;
         }
-        iitems[i]=item.iMenuItem();
     }
-    //TODO: dirrty hack sampler menu will be added at 0 
-    iitems[iitems.len-1]=iitems[0];
-    return iitems;
+    return items;
 }
 
 pub const MenuValue=struct{
