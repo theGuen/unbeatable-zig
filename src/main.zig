@@ -33,7 +33,7 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
     const screenWidth = 450;
     const screenHeight = 500;
 
-    ray.InitWindow(screenWidth, screenHeight, "Unbeatable - ZIG");
+    ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
     defer ray.CloseWindow();
     ray.SetTargetFPS(60);
 
@@ -140,8 +140,11 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
         defer ray.EndDrawing();
 
         ray.ClearBackground(ray.RAYWHITE);
-        ray.DrawText("Enter a sample name to load ->", 10, 10, 8, ray.BLACK);
-        ray.DrawText(menu.current(), 10, 20, 8, ray.BLACK);
+        
+        ray.DrawRectangle(10, 5, 210, 37, ray.GRAY);
+        ray.DrawRectangleLines(10, 5, 210, 37, ray.RED);
+        ray.DrawText("Enter a sample name to load ->", 12, 10, 13, ray.BLACK);
+        ray.DrawText(menu.current(), 12, 25, 15, ray.MAROON);
         
         ray.WrapDrawRectangleRec(&textBox, ray.GRAY);
         if (onText){
@@ -175,7 +178,7 @@ pub fn main() !void {
     try smplr.loadSamplerConfig(alloc,&sampler);
     var recorder = rcdr.newRecorder(alloc);
 
-    //try loadCmdLineArgSamples(alloc);
+    try h.loadCmdLineArgSamples(alloc,&sampler);
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const arenaAlloc = arena.allocator();
@@ -184,14 +187,14 @@ pub fn main() !void {
 
     _ = async asyncMain();
 
-    //recorder.startRecording();
+    recorder.startRecording();
     //loop forever
     _ = try drawWindow(&sampler,&menu);
-    //var recorded = recorder.stopRecording();
+    var recorded = recorder.stopRecording();
     //alloc.free(recorded);
 
-    //sampler.load(&recorded,15);
-    //try smplr.saveSamplerConfig(alloc,&sampler);
+    sampler.load(&recorded,15);
+    try smplr.saveSamplerConfig(alloc,&sampler);
     
     resume ma.startAudioFrame;
 }

@@ -13,6 +13,7 @@ fn openHorizontalBoxImpl(ui:?*anyopaque, label:[*c]const u8) callconv(.C) void{
     if(gh.label[0]==0){
         gh.label = label;
     }
+    gh.openBoxes +=1;
     gh.items[gh.count].label = label;
     std.debug.print("openHorizontalBoxImpl:{s}\n",.{label});
 }
@@ -20,14 +21,18 @@ fn openVerticalBoxImpl(ui:?*anyopaque, label:[*c]const u8) callconv(.C) void{
     _=ui;
     _=label;
     var gh = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), ui));
+    gh.openBoxes +=1;
     gh.items[gh.count].label = label;
     std.debug.print("openVerticalBoxImpl:{s}\n",.{label});
 }
 fn closeBoxImpl(ui:?*anyopaque) callconv(.C) void{
     _=ui;  
     var gh = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), ui));
-    gh.count+=1;
-    std.debug.print("closeBoxImpl\n",.{});
+    gh.openBoxes -=1;
+    if (gh.openBoxes>0){
+        gh.count+=1;
+        std.debug.print("closeBoxImpl\n",.{});
+    }
 }
 fn addCheckButtonImpl(ui:?*anyopaque, label:[*c]const u8, valuePtr:[*c]f32) callconv(.C) void{
     var tmp = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), ui));
@@ -81,6 +86,7 @@ pub fn newUIGlue()!*UIGlue{
         ig.count=0;
         ig.selected=0;
     }
+    groupholder.openBoxes=0;
     groupholder.count=0;
     retval.uiInterface=@ptrCast(*anyopaque, &groupholder);
     retval.openHorizontalBox=openHorizontalBoxImpl;
@@ -111,6 +117,7 @@ pub const ItemGroup = extern struct{
 };
 pub const GroupHolder = extern struct{
     label:[*c]const u8,
+    openBoxes:usize,
     count:usize,
     items:[16]ItemGroup
 };

@@ -19,6 +19,7 @@ extern "C" {
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include "CInterface.h"
 
 static float mydsp_faustpower2_f(float value) {
 	return (value * value);
@@ -171,7 +172,7 @@ mydsp* newmydsp() {
 void deletemydsp(mydsp* dsp) { 
 	free(dsp);
 }
-/*
+
 void metadatamydsp(MetaGlue* m) { 
 	m->declare(m->metaInterface, "analyzers.lib/name", "Faust Analyzer Library");
 	m->declare(m->metaInterface, "analyzers.lib/version", "0.1");
@@ -241,7 +242,7 @@ void metadatamydsp(MetaGlue* m) {
 	m->declare(m->metaInterface, "signals.lib/name", "Faust Signal Routing Library");
 	m->declare(m->metaInterface, "signals.lib/version", "0.1");
 }
-*/
+
 int getSampleRatemydsp(mydsp* dsp) {
 	return dsp->fSampleRate;
 }
@@ -740,7 +741,7 @@ void initmydsp(mydsp* dsp, int sample_rate) {
 	classInitmydsp(sample_rate);
 	instanceInitmydsp(dsp, sample_rate);
 }
-/*
+
 void buildUserInterfacemydsp(mydsp* dsp, UIGlue* ui_interface) {
 	ui_interface->openVerticalBox(ui_interface->uiInterface, "multifx2");
 	ui_interface->openVerticalBox(ui_interface->uiInterface, "Compressor");
@@ -784,7 +785,7 @@ void buildUserInterfacemydsp(mydsp* dsp, UIGlue* ui_interface) {
 	ui_interface->closeBox(ui_interface->uiInterface);
 	ui_interface->closeBox(ui_interface->uiInterface);
 }
-*/
+
 void computemydsp(mydsp* dsp, int count, FAUSTFLOAT* inputs, FAUSTFLOAT* outputs) {
 	int iSlow0 = (int)(float)dsp->fEntry0;
 	int iSlow1 = (int)(float)dsp->fEntry1;

@@ -3,16 +3,18 @@ const process = std.process;
 const ma = @import("miniaudio.zig");
 const smplr = @import("sampler.zig");
 
-fn loadCmdLineArgSamples(alloc:std.mem.Allocator,sampler:*smplr.Sampler)!void{
+pub fn loadCmdLineArgSamples(alloc:std.mem.Allocator,sampler:*smplr.Sampler)!void{
     var args = process.args();
     // skip my own exe name
     _ = args.skip();
+    var i:usize=0;
     while (true){
         const arg1 = (try args.next(alloc) orelse {
             break;
         });   
         var b = try ma.loadAudioFile(alloc,arg1);
-        sampler.load(b);
+        sampler.load(b,i);
+        i+=1;
         alloc.free(arg1);
     }
 }

@@ -1,6 +1,6 @@
 const std = @import("std");
 const ma = @cImport(@cInclude("miniaudio.h"));
-const mfx = @cImport(@cInclude("multifx1.h"));
+const mfx = @cImport(@cInclude("multifx2.h"));
 const ui = @import("UIGlue.zig");
 const rcdr = @import("recorder.zig");
 

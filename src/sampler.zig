@@ -242,8 +242,8 @@ fn pitchSemis(pitch: i64)f32{
 
 pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
     std.fs.cwd().makeDir("project1") catch {};
-    const dir = try std.fs.cwd().openDir("project1",.{ .iterate = true });
-    var rfile = try dir.openFile("sampler_config.json", .{});
+    const dir = std.fs.cwd().openDir("project1",.{ .iterate = true }) catch return {};
+    var rfile = dir.openFile("sampler_config.json", .{}) catch return {};
     const body_content = try rfile.readToEndAlloc(alloc,std.math.maxInt(usize));
     defer alloc.free(body_content);
     defer rfile.close();
