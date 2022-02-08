@@ -13,6 +13,7 @@ miniaudio copy of the split version included in ./miniaudio
 
 faust copy of the CInterface.h included in ./multifx
 * link: https://github.com/grame-cncm/faust/blob/master-dev/architecture/faust/gui/CInterface.h
+
 For Faust Effects compile with c
 
 e.g. 
@@ -25,7 +26,7 @@ then make the folllowing changes to multifx2.h
  #include "CInterface.h"
  ```
  
- and patch the computemydsp function... i should writte a wrapper for this...
+ and patch the computemydsp function... i should write a wrapper for this...
 
 ```
 -- void computemydsp(mydsp* dsp, int count, FAUSTFLOAT** inputs, FAUSTFLOAT** outputs) {
@@ -52,7 +53,7 @@ then make the folllowing changes to multifx2.h
                     ...
 ```
 
-The buildUserInterfacemydsp should build a simple cursor menu. KEY_ENTER to enter KEY_BACKSPAVE to leave ...
+The buildUserInterfacemydsp should build a simple cursor menu. KEY_ENTER to enter KEY_BACKSPACE to leave ...
 
 For now only a few items are supported and NO nested Boxes!
  - HorizontalBox
@@ -66,12 +67,15 @@ The Sampler Menu has
  - loop
  - gate
  - mutegroup
- - pitch
+ - pitch (shitty)
  - start
  - end
- - TODO: GAIN
+ - gain (linear)
 
 which are affecting the last triggered sample
+
+The Recorder Menu has only one item...
+select a destination pad and start recording
 
 for now you can load samples on startup
 
