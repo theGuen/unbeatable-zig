@@ -183,17 +183,13 @@ pub fn main() !void {
     defer arena.deinit();
     const arenaAlloc = arena.allocator();
     var fxMenuItems = try ma.init(alloc,arenaAlloc,mix,&recorder);
-    var menu:mn.Menu = try mn.initMenu(arenaAlloc,&sampler,fxMenuItems);
+    var menu:mn.Menu = try mn.initMenu(arenaAlloc,&sampler,&recorder,fxMenuItems);
 
     _ = async asyncMain();
 
-    recorder.startRecording();
     //loop forever
     _ = try drawWindow(&sampler,&menu);
-    var recorded = recorder.stopRecording();
-    //alloc.free(recorded);
 
-    sampler.load(&recorded,15);
     try smplr.saveSamplerConfig(alloc,&sampler);
     
     resume ma.startAudioFrame;

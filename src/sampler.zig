@@ -15,6 +15,7 @@ pub const Sampler = struct{
         defer self.alloc.free(b);
         
         sound.buffer = sample.*;
+        sound.gain = 0.9;
         sound.posf = 0;
         sound.start = 0;
         sound.end = @intToFloat(f64,sound.buffer.len-1);
@@ -100,12 +101,21 @@ pub const Sampler = struct{
         if(size > 0)size = size -1;
         return size;
     }
+    pub fn setSoundGain(self: *Sampler,gain:f32)f32{
+        var sound = &self.sounds[self.selectedSound];
+        sound.gain = gain;
+        return gain;
+    }
+    pub fn getSoundGain(self: *Sampler)f32{
+        return self.sounds[self.selectedSound].gain;
+    }
 };
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
     var this = Sampler{.alloc = alloc,.selectedSound=0,.sounds=undefined};
     for (this.sounds) |*s|{
         s.buffer = &[_]f32{}; 
         s.posf = 0;
+        s.gain = 1;
         s.start = 0;
         s.end = 0;
         s.playing = false;
@@ -122,6 +132,7 @@ pub fn initSampler(alloc: std.mem.Allocator)Sampler{
 const Sound = struct{
     buffer: []f32,
     posf : f64,
+    gain: f32,
     start: f64,
     end: f64,
     playing: bool,
@@ -150,7 +161,7 @@ const Sound = struct{
             }else{
                 p.posf -= p.pitch;
             }
-            return p.buffer[@intCast(usize,pos)];
+            return p.buffer[@intCast(usize,pos)]*p.gain;
         }else{
             return 0;
         }
@@ -193,6 +204,7 @@ const SamplerW = struct{
 };
 const SoundW = struct{
     name : []u8,
+    gain:f32,
     start: f64,
     end: f64,
     looping :bool,
@@ -207,6 +219,7 @@ const SamplerL = struct{
 };
 const SoundL = struct{
     name : []u8,
+    gain: f32,
     start: f64,
     end: f64,    
     looping :bool,
@@ -266,6 +279,7 @@ pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
         }else |err|{
                 std.debug.print("ERROR: {s}\n", .{@errorName(err)});
         }
+        snd.gain = newSound.gain;
         snd.start = newSound.start;
         snd.end = newSound.end;
         snd.looping = newSound.looping;
@@ -285,6 +299,7 @@ pub fn saveSamplerConfig(alloc:std.mem.Allocator,sampler:*Sampler)!void{
     for (sw.sounds)|*snd,i|{
         const string = try std.fmt.allocPrint(arena.allocator(),"project1/snd_{d}.wav",.{i});
         snd.name = string;
+        snd.gain = sampler.sounds[i].gain;
         snd.start = sampler.sounds[i].start;
         snd.end = sampler.sounds[i].end;
         snd.looping = sampler.sounds[i].looping;
