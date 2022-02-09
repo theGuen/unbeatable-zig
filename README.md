@@ -75,7 +75,12 @@ The Sampler Menu has
 which are affecting the last triggered sample
 
 The Recorder Menu has only one item...
-select a destination pad and start recording
+select a destination pad and start recording.
+ - Hit up for lock in a destination pad. 
+ - Hit up again for start recording.
+ - Hit down for stop recording.
+ - Recording will loaded on the destination pad
+ - You can still use the old pad while recording...
 
 for now you can load samples on startup
 
@@ -99,3 +104,15 @@ I am confident that zig won't let me down... So maybe it's time to commit to thi
 I am dreaming about getting this on a hardwarebox with 16 Buttons, two encoders and an oled
 
 powered by a raspberry pi zero2 and a hifiberry dac+ zero
+
+Today i made my first little lofi beat.
+ - 8 prechopped melodic samples 
+ - 4 drumsounds
+ - resampled the hihat with some silence at the end
+ - trimmed the length of that hat to make 1/8 metronome while looping
+ - recorded a 4 bar drum loop on that metronome
+ - recorded 2 Parts over that drumloop
+ - resampled the two parts while using pitch and phaser from the multifx (faust effects are really nice :) )
+ - added some reverse tricks and filtersweeps while recording
+
+ Since the samples were prechopped... Sample chopping is the next thing to implement
