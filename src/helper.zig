@@ -35,3 +35,12 @@ pub fn userInput(samplers:*smplr.Sampler)!void{
         }
     }
 }
+
+pub fn StringHasSuffix(string:[]const u8,suffix:[]const u8)bool{
+    var retval = true;
+    if(suffix.len>string.len)return false;
+    for(suffix)|c,i|{
+        retval = retval and (string[string.len-suffix.len+i]==c);
+    }
+    return retval;
+}
