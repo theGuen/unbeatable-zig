@@ -352,6 +352,8 @@ fn downrecord(self: *RecorderValue) void {
         self.sampler.load(&recorded,@intCast(usize,self.state.stateValInt));
         self.loaded=false;
         self.sampler.play(@intCast(usize,self.state.stateValInt));
+    }else{
+        self.loaded=false;
     }
 }
 fn currentrecord(self: *RecorderValue) [*c]const u8 {
