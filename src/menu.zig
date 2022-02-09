@@ -338,16 +338,20 @@ fn buildSamplerMenu(alloc: std.mem.Allocator,sampler: *smplr.Sampler) ![]Sampler
 
 fn uprecord(self: *RecorderValue) void{
     if (!self.recorder.recording) {
-        self.state.stateValInt = @intCast(i64,self.sampler.selectedSound);
-        std.debug.print("Loaded: {d}\n", .{self.state.stateValInt});
-        self.recorder.startRecording();
+        if (self.loaded){
+            self.recorder.startRecording();
+        }else{
+            self.state.stateValInt = @intCast(i64,self.sampler.selectedSound);
+            self.loaded=true;
+        }
     }
 }
 fn downrecord(self: *RecorderValue) void {
     if (self.recorder.recording) {
         var recorded = self.recorder.stopRecording();
-        //alloc.free(recorded);
         self.sampler.load(&recorded,@intCast(usize,self.state.stateValInt));
+        self.loaded=false;
+        self.sampler.play(@intCast(usize,self.state.stateValInt));
     }
 }
 fn currentrecord(self: *RecorderValue) [*c]const u8 {
@@ -355,7 +359,11 @@ fn currentrecord(self: *RecorderValue) [*c]const u8 {
     if (self.recorder.recording) {
         self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}: recording...", .{self.state.stateValInt}) catch "";
     }else{
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: Pad {d}", .{self.label,self.sampler.selectedSound}) catch "";
+        if(!self.loaded){
+            self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: Pad {d}", .{self.label,self.sampler.selectedSound}) catch "";
+        }else{
+            self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}: armed...", .{self.state.stateValInt}) catch "";
+        }
     }
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
@@ -364,6 +372,7 @@ const RecorderValue = struct {
     recorder: *rcdr.Recorder,
     sampler: *smplr.Sampler,
     label: [*c]const u8,
+    loaded:bool,
     state: State,
     increment: fn (self: *RecorderValue)void,
     decrement: fn (self: *RecorderValue)void,
@@ -451,7 +460,7 @@ fn buildRecorderMenu(alloc: std.mem.Allocator,recorder: *rcdr.Recorder,sampler: 
     _=recorder;
     var menuItem:[]RecorderMenuItem = try alloc.alloc(RecorderMenuItem,1);
     var menuValues:[]RecorderValue = try alloc.alloc(RecorderValue,1);
-    menuValues[0] = RecorderValue{ .recorder = recorder, .sampler = sampler, .label = "record", .increment=uprecord, .decrement=downrecord, .current=currentrecord, .state = newState() };
+    menuValues[0] = RecorderValue{ .recorder = recorder, .sampler = sampler, .label = "record", .increment=uprecord, .decrement=downrecord, .current=currentrecord,.loaded=false, .state = newState() };
     
     menuItem[0].label = "Recorder";
     menuItem[0].active = false;
