@@ -148,7 +148,7 @@ const Sound = struct{
             const ende = p.end;
             const start = p.start;
             if(p.posf > ende and !p.reversed){
-                p.posf = p.posf-ende;
+                p.posf = p.posf-ende+start;
                 pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
             }else if (p.posf < start and p.reversed){
