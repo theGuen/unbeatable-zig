@@ -275,7 +275,7 @@ void buildUserInterfacemydsp(mydsp* dsp, UIGlue* ui_interface) {
 	ui_interface->openVerticalBox(ui_interface->uiInterface, "filter");
 	ui_interface->addNumEntry(ui_interface->uiInterface, "sw2", &dsp->fEntry2, (FAUSTFLOAT)1.0f, (FAUSTFLOAT)0.0f, (FAUSTFLOAT)1.0f, (FAUSTFLOAT)1.0f);
 	ui_interface->addNumEntry(ui_interface->uiInterface, "frequency", &dsp->fEntry6, (FAUSTFLOAT)20000.0f, (FAUSTFLOAT)100.0f, (FAUSTFLOAT)20000.0f, (FAUSTFLOAT)100.0f);
-	ui_interface->addNumEntry(ui_interface->uiInterface, "Q", &dsp->fEntry7, (FAUSTFLOAT)1.0f, (FAUSTFLOAT)0.0f, (FAUSTFLOAT)1000.0f, (FAUSTFLOAT)1.0f);
+	ui_interface->addNumEntry(ui_interface->uiInterface, "Q", &dsp->fEntry7, (FAUSTFLOAT)1.0f, (FAUSTFLOAT)1.0f, (FAUSTFLOAT)1000.0f, (FAUSTFLOAT)1.0f);
 	ui_interface->closeBox(ui_interface->uiInterface);
 
 	ui_interface->openVerticalBox(ui_interface->uiInterface, "flanger");

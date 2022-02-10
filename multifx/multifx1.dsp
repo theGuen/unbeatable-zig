@@ -16,7 +16,7 @@ delay = nentry("delay",0.25,0,1,0.01) : si.smoo;
 feedback = nentry("feedback",0.5,0,1,0.01) : si.smoo;
 
 sw2=nentry("sw2",1,0,1,1);
-Q = nentry("Q",1,0,1000,1) : si.smoo;
+Q = nentry("Q",1,1,1000,1) : si.smoo;
 fc = nentry("frequency",20000,100,20000,100) : si.smoo;
 
 sw3=nentry("sw3",1,0,1,1);
