@@ -75,6 +75,23 @@ pub const Menu = struct {
     }
 };
 
+fn upgain(self: *SamplerValue) void {
+    self.state.stateValFloat = self.sampler.getSoundGain();
+    self.state.stateValFloat = std.math.min(self.state.stateValFloat + 0.1,1.5);
+     _ = self.sampler.setSoundGain(self.state.stateValFloat);
+}
+fn downgain(self: *SamplerValue) void{
+    self.state.stateValFloat = self.sampler.getSoundGain();
+    self.state.stateValFloat = std.math.max(self.state.stateValFloat - 0.1,0);
+    _ = self.sampler.setSoundGain(self.state.stateValFloat);
+}
+fn currentgain(self: *SamplerValue) [*c]const u8 {
+    self.state.stateValFloat = self.sampler.getSoundGain();
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d:.1}", .{self.label,self.state.stateValFloat}) catch "";
+    return @ptrCast([*c]const u8, self.state.stateValStr);
+}
+
 fn upreverse(self: *SamplerValue)void{
     if (!self.sampler.isSoundReverse()) {
         self.sampler.reverseSound();
@@ -96,7 +113,6 @@ fn currentreverse(self: *SamplerValue) [*c]const u8 {
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {s}", .{self.label,onoff}) catch "";
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
-
 
 fn uploop(self: *SamplerValue) void{
     if (!self.sampler.isSoundLooping()) {
@@ -120,7 +136,6 @@ fn currentloop(self: *SamplerValue) [*c]const u8 {
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
-
 fn upgate(self: *SamplerValue) void{
     if (!self.sampler.isSoundGated()) {
         self.sampler.gateSound();
@@ -143,7 +158,6 @@ fn currentgate(self: *SamplerValue) [*c]const u8 {
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
-
 fn upmutegroup(self: *SamplerValue) void{
     self.state.stateValInt = @intCast(i64, self.sampler.getSoundMutegroup());
     self.state.stateValInt += 1;
@@ -152,6 +166,7 @@ fn upmutegroup(self: *SamplerValue) void{
 fn downmutegroup(self: *SamplerValue) void{
     self.state.stateValInt = @intCast(i64, self.sampler.getSoundMutegroup());
     self.state.stateValInt -= 1;
+    self.state.stateValInt = std.math.max(self.state.stateValInt,0);
     _ = self.sampler.setSoundMutegroup(@intCast(usize, self.state.stateValInt));
 }
 fn currentmutegroup(self: *SamplerValue) [*c]const u8 {
@@ -160,7 +175,6 @@ fn currentmutegroup(self: *SamplerValue) [*c]const u8 {
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d}", .{self.label,self.state.stateValInt}) catch "";
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
-
 
 fn uppitch(self: *SamplerValue) void {
     self.state.stateValInt = self.sampler.getSoundPitchSemis();
@@ -213,20 +227,59 @@ fn currentend(self: *SamplerValue) [*c]const u8 {
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
-fn upgain(self: *SamplerValue) void {
-    self.state.stateValFloat = self.sampler.getSoundGain();
-    self.state.stateValFloat = std.math.min(self.state.stateValFloat + 0.1,1.5);
-     _ = self.sampler.setSoundGain(self.state.stateValFloat);
+fn upstartlazy(self: *SamplerValue) void{
+    self.state.stateValInt = self.sampler.getSoundCurrentPos();
+    self.state.stateValInt = std.math.min(self.state.stateValInt,self.sampler.getSoundSize());
+    _ = self.sampler.setSoundStart(self.state.stateValInt);
 }
-fn downgain(self: *SamplerValue) void{
-    self.state.stateValFloat = self.sampler.getSoundGain();
-    self.state.stateValFloat = std.math.max(self.state.stateValFloat - 0.1,0);
-    _ = self.sampler.setSoundGain(self.state.stateValFloat);
+fn downstartlazy(self: *SamplerValue) void{
+    self.state.stateValInt = 0;
+    _ = self.sampler.setSoundStart(self.state.stateValInt);
 }
-fn currentgain(self: *SamplerValue) [*c]const u8 {
-    self.state.stateValFloat = self.sampler.getSoundGain();
+fn currentstartlazy(self: *SamplerValue) [*c]const u8 {
+    self.state.stateValInt = self.sampler.getSoundStart();
     std.heap.page_allocator.free(self.state.stateValStr);
-    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d:.1}", .{self.label,self.state.stateValFloat}) catch "";
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d}", .{self.label,self.state.stateValInt}) catch "";
+    return @ptrCast([*c]const u8, self.state.stateValStr);
+}
+
+fn upendlazy(self: *SamplerValue) void{
+    self.state.stateValInt = self.sampler.getSoundCurrentPos();
+    self.state.stateValInt = std.math.min(self.state.stateValInt,self.sampler.getSoundSize());
+    _ = self.sampler.setSoundEnd(self.state.stateValInt);
+}
+fn downendlazy(self: *SamplerValue) void{
+    self.state.stateValInt = @intCast(i64,self.sampler.getSoundSize());
+    _ = self.sampler.setSoundEnd(self.state.stateValInt);
+}
+fn currentendlazy(self: *SamplerValue) [*c]const u8 {
+    self.state.stateValInt = self.sampler.getSoundEnd();
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d}", .{self.label,self.state.stateValInt}) catch "";
+    return @ptrCast([*c]const u8, self.state.stateValStr);
+}
+
+fn upmovelazy(self: *SamplerValue) void{
+    const s = self.sampler.getSoundStart();
+    const e = self.sampler.getSoundEnd();
+    const newS = std.math.min(e,self.sampler.getSoundSize());
+    const newE = std.math.min(e + (e-s),self.sampler.getSoundSize());
+    _ = self.sampler.setSoundStart(newS);
+    _ = self.sampler.setSoundEnd(newE);
+    self.state.stateValInt +=1;
+}
+fn downmovelazy(self: *SamplerValue) void{
+    var s = self.sampler.getSoundStart();
+    var e = self.sampler.getSoundEnd();
+    const newS = std.math.max(s,0);
+    const newE = std.math.max(s - (e-s),0);
+    _ = self.sampler.setSoundEnd(newS);
+    _ = self.sampler.setSoundStart(newE);
+    self.state.stateValInt -=1;
+}
+fn currentmovelazy(self: *SamplerValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {d}", .{self.label,self.state.stateValInt}) catch "";
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
@@ -318,15 +371,19 @@ pub const SamplerMenuItem = struct {
 
 fn buildSamplerMenu(alloc: std.mem.Allocator,sampler: *smplr.Sampler) ![]SamplerMenuItem {
     var samplerMenuItem:[]SamplerMenuItem = try alloc.alloc(SamplerMenuItem,1);
-    var menuValues:[]SamplerValue = try alloc.alloc(SamplerValue,8);
+    var menuValues:[]SamplerValue = try alloc.alloc(SamplerValue,11);
     menuValues[0] = SamplerValue{ .sampler = sampler, .label = "gain", .increment=upgain, .decrement=downgain, .current=currentgain, .state = newState()  };
     menuValues[1] = SamplerValue{ .sampler = sampler, .label = "reverse", .increment=upreverse, .decrement=downreverse, .current=currentreverse, .state = newState() };
     menuValues[2] = SamplerValue{ .sampler = sampler, .label = "loop", .increment=uploop, .decrement=downloop, .current=currentloop, .state = newState()  };
     menuValues[3] = SamplerValue{ .sampler = sampler, .label = "gate", .increment=upgate, .decrement=downgate, .current=currentgate, .state = newState()  };
     menuValues[4] = SamplerValue{ .sampler = sampler, .label = "mutegroup", .increment=upmutegroup, .decrement=downmutegroup, .current=currentmutegroup, .state = newState()  };
     menuValues[5] = SamplerValue{ .sampler = sampler, .label = "pitch", .increment=uppitch, .decrement=downpitch, .current=currentpitch, .state = newState()  };
+    //TODO: This goes to the chop menu
     menuValues[6] = SamplerValue{ .sampler = sampler, .label = "start", .increment=upstart, .decrement=downstart, .current=currentstart, .state = newState()  };
     menuValues[7] = SamplerValue{ .sampler = sampler, .label = "end", .increment=upend, .decrement=downend, .current=currentend, .state = newState()  };
+    menuValues[8] = SamplerValue{ .sampler = sampler, .label = "lazystart", .increment=upstartlazy, .decrement=downstartlazy, .current=currentstartlazy, .state = newState()  };
+    menuValues[9] = SamplerValue{ .sampler = sampler, .label = "lazyend", .increment=upendlazy, .decrement=downendlazy, .current=currentendlazy, .state = newState()  };
+    menuValues[10] = SamplerValue{ .sampler = sampler, .label = "move", .increment=upmovelazy, .decrement=downmovelazy, .current=currentmovelazy, .state = newState()  };
     
     samplerMenuItem[0].label = "Sampler";
     samplerMenuItem[0].active = false;

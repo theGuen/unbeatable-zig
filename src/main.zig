@@ -173,6 +173,18 @@ pub fn main() !void {
     defer std.debug.assert(!general_purpose_allocator.deinit());
     const alloc = general_purpose_allocator.allocator();
 
+    const dir = std.fs.cwd().openDir("c_examples",.{ .iterate = true }) catch return {};
+    var walker = dir.iterate();
+    while (try walker.next())|entry|{
+        if (entry.kind == std.fs.File.Kind.Directory){
+            std.debug.print("D {s}\n",.{entry.name});
+        }else{
+            if (h.StringHasSuffix(entry.name,".wav") or h.StringHasSuffix(entry.name,".mp3")){
+                std.debug.print("F {s}\n",.{entry.name});
+            }
+        }
+    }
+
     sampler = smplr.initSampler(alloc); 
     defer sampler.deinit();
     try smplr.loadSamplerConfig(alloc,&sampler);

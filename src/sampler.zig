@@ -90,7 +90,7 @@ pub const Sampler = struct{
     }
     pub fn setSoundEnd(self: *Sampler,end:i64)i64{
         var sound = &self.sounds[self.selectedSound];
-        sound.end = @intToFloat(f64,@divTrunc(end,2)*2);
+        sound.end = @intToFloat(f64,@divTrunc(end,2)*2)+1;
         return end;
     }
     pub fn getSoundEnd(self: *Sampler)i64{
@@ -108,6 +108,9 @@ pub const Sampler = struct{
     }
     pub fn getSoundGain(self: *Sampler)f32{
         return self.sounds[self.selectedSound].gain;
+    }
+    pub fn getSoundCurrentPos(self: *Sampler)i64{
+        return @floatToInt(i64,self.sounds[self.selectedSound].posf);
     }
 };
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
@@ -142,7 +145,7 @@ const Sound = struct{
     pitch :f32,
     semis:i64,
     mutegroup: usize,
-    pub fn next(p:*Sound)f32{
+    pub fn next(p:*Sound)f32{      
         if (p.buffer.len >0 and p.playing){
             var pos = @floatToInt(i64,p.posf);
             const ende = p.end;
