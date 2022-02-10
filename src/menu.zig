@@ -283,6 +283,30 @@ fn currentmovelazy(self: *SamplerValue) [*c]const u8 {
     return @ptrCast([*c]const u8, self.state.stateValStr);
 }
 
+fn upcopy(self: *SamplerValue) void{
+    if(self.state.stateValInt>-1){
+        const src = @intCast(usize,self.state.stateValInt);
+        _ =self.sampler.copySound(src,self.sampler.selectedSound);
+        self.state.stateValInt = -1;
+    }else{
+        const s = self.sampler.selectedSound;
+        self.state.stateValInt = @intCast(i64,s);
+    }
+}
+fn downcopy(self: *SamplerValue) void{
+    self.state.stateValInt  = -1;
+}
+fn currentcopy(self: *SamplerValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    if(self.state.stateValInt>-1){
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d} to {d}", .{self.label,self.state.stateValInt,self.sampler.selectedSound}) catch "";
+    }else{
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d}", .{self.label,self.sampler.selectedSound}) catch "";
+        
+    }
+    return @ptrCast([*c]const u8, self.state.stateValStr);
+}
+
 const SamplerValue = struct {
     sampler: *smplr.Sampler,
     label: [*c]const u8,
@@ -371,7 +395,7 @@ pub const SamplerMenuItem = struct {
 
 fn buildSamplerMenu(alloc: std.mem.Allocator,sampler: *smplr.Sampler) ![]SamplerMenuItem {
     var samplerMenuItem:[]SamplerMenuItem = try alloc.alloc(SamplerMenuItem,1);
-    var menuValues:[]SamplerValue = try alloc.alloc(SamplerValue,11);
+    var menuValues:[]SamplerValue = try alloc.alloc(SamplerValue,12);
     menuValues[0] = SamplerValue{ .sampler = sampler, .label = "gain", .increment=upgain, .decrement=downgain, .current=currentgain, .state = newState()  };
     menuValues[1] = SamplerValue{ .sampler = sampler, .label = "reverse", .increment=upreverse, .decrement=downreverse, .current=currentreverse, .state = newState() };
     menuValues[2] = SamplerValue{ .sampler = sampler, .label = "loop", .increment=uploop, .decrement=downloop, .current=currentloop, .state = newState()  };
@@ -384,6 +408,7 @@ fn buildSamplerMenu(alloc: std.mem.Allocator,sampler: *smplr.Sampler) ![]Sampler
     menuValues[8] = SamplerValue{ .sampler = sampler, .label = "lazystart", .increment=upstartlazy, .decrement=downstartlazy, .current=currentstartlazy, .state = newState()  };
     menuValues[9] = SamplerValue{ .sampler = sampler, .label = "lazyend", .increment=upendlazy, .decrement=downendlazy, .current=currentendlazy, .state = newState()  };
     menuValues[10] = SamplerValue{ .sampler = sampler, .label = "move", .increment=upmovelazy, .decrement=downmovelazy, .current=currentmovelazy, .state = newState()  };
+    menuValues[11] = SamplerValue{ .sampler = sampler, .label = "copy", .increment=upcopy, .decrement=downcopy, .current=currentcopy, .state = newState()  };
     
     samplerMenuItem[0].label = "Sampler";
     samplerMenuItem[0].active = false;

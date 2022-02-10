@@ -112,6 +112,26 @@ pub const Sampler = struct{
     pub fn getSoundCurrentPos(self: *Sampler)i64{
         return @floatToInt(i64,self.sounds[self.selectedSound].posf);
     }
+    pub fn copySound(self: *Sampler,src:usize,dest:usize)bool{
+        var sound:*Sound = &self.sounds[src];
+        var soundd = &self.sounds[dest];
+        soundd.playing = false;
+        var b = sound.buffer;
+        var nb = self.alloc.alloc(f32,b.len) catch return false;
+        for(b)|byte,i|nb[i]=byte;
+        self.load(&nb,dest);
+        
+        soundd.gain = sound.gain;
+        soundd.start = sound.start;
+        soundd.end = sound.end;
+        soundd.looping = sound.looping;
+        soundd.reversed = sound.reversed;
+        soundd.gated = sound.gated;
+        soundd.pitch = sound.pitch;
+        soundd.semis = sound.semis;
+        soundd.mutegroup = sound.mutegroup;
+        return true;
+    }
 };
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
     var this = Sampler{.alloc = alloc,.selectedSound=0,.sounds=undefined};
