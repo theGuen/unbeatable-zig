@@ -178,13 +178,16 @@ const Sound = struct{
         var r:usize = 1;
         var retval = [2]f32{0,0};    
         if (p.buffer.len >0 and p.playing){
+            var pos = @floatToInt(i64,p.posf);
             const ende = p.end;
             const start = p.start;
-            if(p.posf >= ende and !p.reversed){
+            if(p.posf > ende and !p.reversed){
                 p.posf = p.posf-ende+start;
+                pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
-            }else if (p.posf <= start and p.reversed){
+            }else if (p.posf < start and p.reversed){
                 p.posf = ende-(start-p.posf);
+                pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
             }
             if (!p.reversed){
@@ -194,7 +197,6 @@ const Sound = struct{
                 r = 0;
                 p.posf -= p.pitch;
             }
-            const pos = @floatToInt(i64,p.posf);
             retval[0] = p.buffer[l][@intCast(usize,pos)]*p.gain;
             retval[1] = p.buffer[r][@intCast(usize,pos)]*p.gain;
             return retval;
