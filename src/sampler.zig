@@ -376,6 +376,7 @@ pub fn copySample(alloc:std.mem.Allocator,sample: [][]f32)![][]f32{
     return ret;
 }
 pub fn splitSample(alloc:std.mem.Allocator,sample: []f32,slen:usize)![][]f32{
+    //TODO: maybe not my job
     defer alloc.free(sample);
     var splitLen:usize = slen/2;
     const sam = sample;

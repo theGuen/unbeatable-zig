@@ -71,6 +71,10 @@ The Sampler Menu has
  - start
  - end
  - gain (linear)
+ - lazystart (hit up while playing sets the new start NOW. Hit down to reset)
+ - lazyend (hit up while playing sets the new end NOW. Hit down to reset)
+ - move (up/down moves the start and end point by end-start)
+ - copy (hit up to select a src... hit a pad to select dest... hit up to copy. Down is back)
 
 which are affecting the last triggered sample
 
@@ -116,3 +120,6 @@ Today i made my first little lofi beat.
  - added some reverse tricks and filtersweeps while recording
 
  Since the samples were prechopped... Sample chopping is the next thing to implement
+ 
+ Sample chopping is done...
+ Now we handle left/right seperate. TODO:unpatch faust fx
