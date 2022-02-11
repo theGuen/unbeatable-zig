@@ -22,15 +22,15 @@ fn mix()[2]f32{
         sample[0] += temp[0];
         sample[1] += temp[1];
     }
-    sample[0] *= 0.8;
-    sample[1] *= 0.8;
     return sample;
 }
+
 
 // TODO:This loop takes 33M in memory???
 fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
     const screenWidth = 450;
-    const screenHeight = 500;
+    const screenHeight = 560;    
+    var smplDisp:[430]c_int=undefined;
 
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
     defer ray.CloseWindow();
@@ -39,7 +39,7 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
     var buttons : [16]ray.Rectangle= undefined;
     for (buttons) |*b,i|{
         const ix = @intToFloat(f32,10 + (i%4)*10+(i%4)*100);
-        const iy = @intToFloat(f32,50 + (i/4)*10+(i/4)*100);
+        const iy = @intToFloat(f32,110 + (i/4)*10+(i/4)*100);
         b.* = ray.Rectangle{ .x=ix, .y=iy, .width=100, .height=100 };
     }
 
@@ -48,18 +48,37 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
         b.* = ray.GREEN;
     }
     const keys = [_]c_int{ray.KEY_ONE,ray.KEY_TWO,ray.KEY_THREE,ray.KEY_FOUR,ray.KEY_Q,ray.KEY_W,ray.KEY_E,ray.KEY_R,ray.KEY_A,ray.KEY_S,ray.KEY_D,ray.KEY_F,ray.KEY_Z,ray.KEY_X,ray.KEY_C,ray.KEY_V};
-    var textBox = ray.Rectangle{ .x=230, .y=5, .width=210, .height=25 };
-    //TODO: use another allocator
-    var dta = std.heap.page_allocator.alloc(u8, 256)catch |err| std.debug.panic("write failed: {s}", .{@errorName(err)});
-    defer std.heap.page_allocator.free(dta);
-    dta[0]=0;
-    for (dta[0..255]) |*b| b.* = 0;
-    var dt = @ptrCast([*c]u8,dta);
-    var letterCount:usize = 0;
-    var onText = false;
+
     var currentPad:usize = 0;
 
     while (!ray.WindowShouldClose()) {
+        currentPad = sampler.selectedSound;
+//--------------------------------------------------------------------------------------------------------------------------
+// CALC Sample Display
+        var sbuf = sampler.sounds[currentPad].buffer;
+        var sm:usize = 0;
+        var em:usize = 0;
+        var cm:f64 = 0;
+        if (sbuf.len > 0){
+            const scale = sbuf[0].len/430;
+            sm = @floatToInt(usize,sampler.sounds[currentPad].start)/scale;
+            em = @floatToInt(usize,sampler.sounds[currentPad].end)/scale;
+            cm = sampler.sounds[currentPad].posf/@intToFloat(f64,scale);
+        
+            for(smplDisp)|*y,i|{
+                var val:f32 = 0;
+                for(sbuf[0][i*scale..i*scale+scale])|d,j|{
+                    const l = std.math.absFloat(d);
+                    const r = std.math.absFloat(sbuf[1][j]);
+                    val = std.math.max((l+r),val);
+                }
+                y.*=@floatToInt(c_int,std.math.min(val*25,25));
+            }
+        }else{
+            for(smplDisp)|*y|y.*=0;
+        }
+//--------------------------------------------------------------------------------------------------------------------------
+// CALC MOUSE press pad
         var mousePosition = ray.GetMousePosition();
         for (buttons) |*b,i|{
             if (ray.WrapCheckCollisionPointRec(&mousePosition, b)){
@@ -74,6 +93,13 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
                 }
             }
         }
+//--------------------------------------------------------------------------------------------------------------------------
+// CALC MENU Display
+        var padStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}", .{currentPad}) catch "";
+        defer std.heap.page_allocator.free(padStr);
+        const padString = @ptrCast([*c]u8,padStr); 
+//--------------------------------------------------------------------------------------------------------------------------
+// CALC MENU INPUT
         if (ray.IsKeyPressed(ray.KEY_UP)){
             _= menu.prev();
         }
@@ -92,72 +118,55 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
         if (ray.IsKeyPressed(ray.KEY_BACKSPACE)){
             _= menu.leave();
         }
-
-        if (ray.WrapCheckCollisionPointRec(&mousePosition, &textBox)){
-            onText = true;
-            var key = ray.GetCharPressed();
-            while (key > 0){
-                if ((key >= 32) and(key <= 125) and (letterCount < 255)){
-                    dt[letterCount] = @intCast(u8,key);
-                    dt[letterCount+1] = 0; // Add null terminator at the end of the string.
-                    letterCount+=1;
-                }
-                key = ray.GetCharPressed();  // Check next character in the queue
+//--------------------------------------------------------------------------------------------------------------------------
+// CALC PAD INPUT
+        for (keys)|k,i|{
+            if (ray.IsKeyPressed(k)){
+                samplers.play(i);
+                btn_colors[i]=ray.ORANGE;
+                currentPad=i;
             }
-
-            if (ray.IsKeyPressed(ray.KEY_BACKSPACE)){
-                letterCount-=1;
-                if (letterCount < 0) letterCount = 0;
-                dt[letterCount] = 0;
-            }
-            if (ray.IsKeyPressed(ray.KEY_ENTER)){
-                if (dta[0] != 0){
-                    if(ma.loadAudioFile(sampler.alloc,dta))|b|{
-                        const split = try smplr.splitSample(sampler.alloc,b,b.len);
-                        samplers.load(split,currentPad);
-                        for (dta[0..255]) |*x| x.* = 0;
-                        letterCount = 0;
-                    }else |err|{
-                        std.debug.print("ERROR: {s}\n", .{@errorName(err)});
-                    }
-                }
-            }
-        }else{
-            onText = false;
-            for (keys)|k,i|{
-                if (ray.IsKeyPressed(k)){
-                    samplers.play(i);
-                    btn_colors[i]=ray.ORANGE;
-                    currentPad=i;
-                }
-                if (ray.IsKeyReleased(k)){
-                    samplers.stop(i);
-                    btn_colors[i]=ray.GREEN;
-                }
+            if (ray.IsKeyReleased(k)){
+                samplers.stop(i);
+                btn_colors[i]=ray.GREEN;
             }
         }
+//--------------------------------------------------------------------------------------------------------------------------
         ray.BeginDrawing();
         defer ray.EndDrawing();
-
+//--------------------------------------------------------------------------------------------------------------------------
+// DRAW WAV Display
         ray.ClearBackground(ray.RAYWHITE);
-        
-        ray.DrawRectangle(10, 5, 210, 37, ray.GRAY);
-        ray.DrawRectangleLines(10, 5, 210, 37, ray.RED);
-        ray.DrawText("Enter a sample name to load ->", 12, 10, 13, ray.BLACK);
-        ray.DrawText(menu.current(), 12, 25, 15, ray.MAROON);
-        
-        ray.WrapDrawRectangleRec(&textBox, ray.GRAY);
-        if (onText){
-             ray.DrawRectangleLines(@floatToInt(c_int,textBox.x), @floatToInt(c_int,textBox.y), @floatToInt(c_int,textBox.width), @floatToInt(c_int,textBox.height), ray.RED);
-             ray.DrawText("_", @floatToInt(c_int,textBox.x) + 8 + ray.MeasureText(dt, 15), @floatToInt(c_int,textBox.y) + 10, 15, ray.MAROON);
-        }else{
-             ray.DrawRectangleLines(@floatToInt(c_int,textBox.x), @floatToInt(c_int,textBox.y), @floatToInt(c_int,textBox.width), @floatToInt(c_int,textBox.height), ray.DARKGRAY);
+        ray.DrawRectangle(10, 4, 430, 50, ray.GRAY);
+        ray.DrawRectangleLines(10, 4, 430, 50, ray.RED);
+        for(smplDisp)|y,x|{
+            if (x<sm or x>em){
+                ray.DrawLine(@intCast(c_int,x+10),29+y,@intCast(c_int,x+10),29-y,ray.DARKGRAY);
+            }else{
+                ray.DrawLine(@intCast(c_int,x+10),29+y,@intCast(c_int,x+10),29-y,ray.BLACK);
+            }
+            
         }
-
-        ray.DrawText(dt, @floatToInt(c_int,textBox.x) + 5, @floatToInt(c_int,textBox.y) + 8, 15, ray.MAROON);
+        var ph = @floatToInt(c_int,cm);
+        var sm_c = @intCast(c_int,sm);
+        var em_c = @intCast(c_int,em);
+        ray.DrawLine(10+ph,4,10+ph,54,ray.RED);
+        ray.DrawLine(10+sm_c,4,10+sm_c,54,ray.ORANGE);
+        ray.DrawLine(10+em_c,4,10+em_c,54,ray.ORANGE);
+        //move start
+        //ray.CheckCollisionPointLine(mousePosition, ray.Vector2{.x=10+sm_c,.y=4}, ray.Vector2{.x=10+sm_c,.y=54}, 5);
+//--------------------------------------------------------------------------------------------------------------------------
+// DRAW MENU Display
+        ray.DrawRectangle(10, 65, 210, 37, ray.GRAY);
+        ray.DrawRectangleLines(10, 65, 210, 37, ray.RED);
+        ray.DrawText(padString, 12, 70, 13, ray.BLACK);
+        ray.DrawText(menu.current(), 12, 85, 15, ray.MAROON);
+//--------------------------------------------------------------------------------------------------------------------------
+// DRAW Buttons
         for (buttons) |*b,i|{
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
+//--------------------------------------------------------------------------------------------------------------------------
     }
 }
 
