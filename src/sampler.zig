@@ -7,31 +7,42 @@ pub const Sampler = struct{
     alloc: std.mem.Allocator,
     selectedSound: usize,
     sounds: [16]Sound,
-    pub fn load(self: *Sampler, sample: *[]f32,padNum: usize )void{
+    pub fn load(self: *Sampler, sample: [][]f32,padNum: usize )void{
         self.selectedSound = padNum;
         var sound:*Sound = &self.sounds[self.selectedSound];
         //seems whe have to free the pointer last....
         var b = sound.buffer;
-        defer self.alloc.free(b);
         
-        sound.buffer = sample.*;
+        
+        sound.buffer = sample;
         sound.gain = 0.9;
         sound.posf = 0;
         sound.start = 0;
-        sound.end = @intToFloat(f64,sound.buffer.len-1);
+        sound.end = @intToFloat(f64,sound.buffer[0].len-1);
         sound.reversed = false;
         sound.mutegroup = self.selectedSound;
         std.debug.print("Loaded: {d}\n", .{self.selectedSound});
+        if(b.len>0){
+            self.alloc.free(b[0]);
+            self.alloc.free(b[1]);
+        }
+        self.alloc.free(b);
     }
     pub fn deinit(self: *Sampler)void{
         for (self.sounds) |*s|{
             var b = s.buffer;
-            defer self.alloc.free(b);
+
             s.playing =false;
             s.posf = 0;
             s.start = 0;
             s.end = 0;
-            s.buffer = &[_]f32{};
+            s.buffer = &[_][]f32{};
+
+            if(b.len>0){
+                self.alloc.free(b[0]);
+                self.alloc.free(b[1]);
+            }
+            self.alloc.free(b);
         }
     }
     pub fn play(self: *Sampler,soundIndex:usize)void{
@@ -97,7 +108,7 @@ pub const Sampler = struct{
         return @floatToInt(i64,self.sounds[self.selectedSound].end);
     }
     pub fn getSoundSize(self: *Sampler)usize{
-        var size = self.sounds[self.selectedSound].buffer.len;
+        var size = self.sounds[self.selectedSound].buffer[0].len;
         if(size > 0)size = size -1;
         return size;
     }
@@ -117,9 +128,8 @@ pub const Sampler = struct{
         var soundd = &self.sounds[dest];
         soundd.playing = false;
         var b = sound.buffer;
-        var nb = self.alloc.alloc(f32,b.len) catch return false;
-        for(b)|byte,i|nb[i]=byte;
-        self.load(&nb,dest);
+        var nb = copySample(self.alloc,b)catch return false;
+        self.load(nb,dest);
         
         soundd.gain = sound.gain;
         soundd.start = sound.start;
@@ -136,7 +146,7 @@ pub const Sampler = struct{
 pub fn initSampler(alloc: std.mem.Allocator)Sampler{
     var this = Sampler{.alloc = alloc,.selectedSound=0,.sounds=undefined};
     for (this.sounds) |*s|{
-        s.buffer = &[_]f32{}; 
+        s.buffer = &[_][]f32{}; 
         s.posf = 0;
         s.gain = 1;
         s.start = 0;
@@ -153,7 +163,7 @@ pub fn initSampler(alloc: std.mem.Allocator)Sampler{
 }
 
 const Sound = struct{
-    buffer: []f32,
+    buffer: [][]f32,
     posf : f64,
     gain: f32,
     start: f64,
@@ -165,7 +175,8 @@ const Sound = struct{
     pitch :f32,
     semis:i64,
     mutegroup: usize,
-    pub fn next(p:*Sound)f32{      
+    pub fn next(p:*Sound)[2]f32{
+        var retval = [2]f32{0,0};    
         if (p.buffer.len >0 and p.playing){
             var pos = @floatToInt(i64,p.posf);
             const ende = p.end;
@@ -184,9 +195,12 @@ const Sound = struct{
             }else{
                 p.posf -= p.pitch;
             }
-            return p.buffer[@intCast(usize,pos)]*p.gain;
+            retval[0] = p.buffer[0][@intCast(usize,pos)]*p.gain;
+            retval[1] = p.buffer[1][@intCast(usize,pos)]*p.gain;
+            return retval;
+            
         }else{
-            return 0;
+            return retval;
         }
     }
     fn play(p:*Sound)void{
@@ -298,9 +312,10 @@ pub fn loadSamplerConfig(alloc:std.mem.Allocator,samplers:*Sampler)!void{
         str[newSound.name.len] = 0;
         for (newSound.name) |c,ii| str[ii] = c;
         if(ma.loadAudioFile(alloc,str))|b|{
-                samplers.load(b,i);
+            const split = try splitSample(alloc,b,b.len);
+            samplers.load(split,i);
         }else |err|{
-                std.debug.print("ERROR: {s}\n", .{@errorName(err)});
+            std.debug.print("ERROR: {s}\n", .{@errorName(err)});
         }
         snd.gain = newSound.gain;
         snd.start = newSound.start;
@@ -334,7 +349,8 @@ pub fn saveSamplerConfig(alloc:std.mem.Allocator,sampler:*Sampler)!void{
         var str= try arena.allocator().alloc(u8,string.len+1);
         str[string.len] = 0;
         for (string) |c,ii| str[ii] = c;
-        try ma.saveAudioFile(str,sampler.sounds[i].buffer);
+        var join = try joinSample(arena.allocator(),sampler.sounds[i].buffer);
+        try ma.saveAudioFile(str,join);
     }
     
     std.fs.cwd().makeDir("project1") catch {};
@@ -343,4 +359,47 @@ pub fn saveSamplerConfig(alloc:std.mem.Allocator,sampler:*Sampler)!void{
     defer file.close();
     const fw = file.writer();
     std.json.stringify(sw,std.json.StringifyOptions{.whitespace = null},fw)catch return;
+}
+
+pub fn copySample(alloc:std.mem.Allocator,sample: [][]f32)![][]f32{
+    var ret = try alloc.alloc([]f32,sample.len);
+    var l = try alloc.alloc(f32,sample[0].len);
+    var r = try alloc.alloc(f32,sample[1].len);
+    for (l)|*s,i|{
+        s.* = sample[0][i];
+    }
+    for (r)|*s,i|{
+        s.* = sample[1][i];
+    }
+    ret[0]=l;
+    ret[1]=r;
+    return ret;
+}
+pub fn splitSample(alloc:std.mem.Allocator,sample: []f32,slen:usize)![][]f32{
+    defer alloc.free(sample);
+    var splitLen:usize = slen/2;
+    const sam = sample;
+    var l = try alloc.alloc(f32,splitLen);
+    var r = try alloc.alloc(f32,splitLen);
+    var ret = try alloc.alloc([]f32,2);
+    for (l)|_,i|{
+        if (i == splitLen)break;
+        l[i]=sam[i*2];
+        r[i]=sam[i*2+1];
+    }
+    ret[0]=l;
+    ret[1]=r;
+    return ret;
+}
+
+pub fn joinSample(alloc:std.mem.Allocator,sample: [][]f32)![]f32{
+    if (sample.len>0){
+        var ret = try alloc.alloc(f32,sample[0].len*2);
+        for (sample[0])|_,i|{
+            ret[i*2]=sample[0][i];
+            ret[i*2+1]=sample[1][i];
+        }
+        return ret;
+    }
+    return &[_]f32{};
 }

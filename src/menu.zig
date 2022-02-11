@@ -431,7 +431,8 @@ fn uprecord(self: *RecorderValue) void{
 fn downrecord(self: *RecorderValue) void {
     if (self.recorder.recording) {
         var recorded = self.recorder.stopRecording();
-        self.sampler.load(&recorded,@intCast(usize,self.state.stateValInt));
+        const split = smplr.splitSample(self.recorder.alloc,recorded,recorded.len)catch return {};
+        self.sampler.load(split,@intCast(usize,self.state.stateValInt));
         self.loaded=false;
         self.sampler.play(@intCast(usize,self.state.stateValInt));
     }else{

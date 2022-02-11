@@ -13,7 +13,8 @@ pub fn loadCmdLineArgSamples(alloc:std.mem.Allocator,sampler:*smplr.Sampler)!voi
             break;
         });   
         var b = try ma.loadAudioFile(alloc,arg1);
-        sampler.load(b,i);
+        const split = try smplr.splitSample(alloc,b,b.len);
+        sampler.load(split,i);
         i+=1;
         alloc.free(arg1);
     }

@@ -15,17 +15,16 @@ const rcdr = @import("recorder.zig");
 var sampler:smplr.Sampler = undefined;
 
 // TODO: extract a mixer
-fn mix()f32{   
-    var sample:f32 = 0.0;
+fn mix()[2]f32{   
+    var sample = [2]f32{0,0};
     for (sampler.sounds) |*p|{
-        sample += p.next();  
+        const temp = p.next();  
+        sample[0] += temp[0];
+        sample[1] += temp[1];
     }
-    if (sample > 1){
-        sample = 1;
-    }else if (sample < -1){
-        sample = -1;
-    }
-    return sample*0.8;
+    sample[0] *= 0.8;
+    sample[1] *= 0.8;
+    return sample;
 }
 
 // TODO:This loop takes 33M in memory???
@@ -114,7 +113,8 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
             if (ray.IsKeyPressed(ray.KEY_ENTER)){
                 if (dta[0] != 0){
                     if(ma.loadAudioFile(sampler.alloc,dta))|b|{
-                        samplers.load(b,currentPad);
+                        const split = try smplr.splitSample(sampler.alloc,b,b.len);
+                        samplers.load(split,currentPad);
                         for (dta[0..255]) |*x| x.* = 0;
                         letterCount = 0;
                     }else |err|{

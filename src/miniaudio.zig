@@ -6,11 +6,11 @@ const rcdr = @import("recorder.zig");
 
 pub var startAudioFrame: anyframe = undefined;
 pub var allocator: std.mem.Allocator = undefined;
-pub var mix: fn () f32 = undefined;
+pub var mix: fn () [2]f32 = undefined;
 pub var fx: [*c]mfx.mydsp = undefined;
 pub var recorder: *rcdr.Recorder = undefined;
 
-pub fn init(anAudioAllocator: std.mem.Allocator,aMenuAllocator: std.mem.Allocator, aMixFunction: fn () f32, aRecorder: *rcdr.Recorder) ![]ui.MenuItem {
+pub fn init(anAudioAllocator: std.mem.Allocator,aMenuAllocator: std.mem.Allocator, aMixFunction: fn () [2]f32, aRecorder: *rcdr.Recorder) ![]ui.MenuItem {
     allocator = anAudioAllocator;
     mix = aMixFunction;
     recorder = aRecorder;
@@ -56,7 +56,7 @@ pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !voi
     }
 }
 
-pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) !*[]f32 {
+pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
     var decoder = std.mem.zeroes(ma.ma_decoder);
     var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, 44100);
     var r = ma.ma_decoder_init_file(inFileName.ptr, &config, &decoder);
@@ -82,15 +82,18 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) !*[]f32 {
         std.debug.print("Could read pcm frames:{d}\n", .{r});
         return error.Unknown;
     }
-    return &mybuffer;
+    return mybuffer;
 }
 
 fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
     _ = input;
     _ = device;
     var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
-    for (outw[0 .. frame_count * 2]) |*b| b.* = mix();
-
+    for (outw[0 .. frame_count])|_,i|{
+        const temp = mix();
+        outw[i*2] = temp[0];
+        outw[i*2+1] = temp[1];
+    }
     //apply faust dsp
     var cc: c_int = @intCast(c_int, frame_count * 2);
     mfx.computemydsp(fx, cc, outw, outw);
