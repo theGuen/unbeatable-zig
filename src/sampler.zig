@@ -176,6 +176,8 @@ const Sound = struct{
     semis:i64,
     mutegroup: usize,
     pub fn next(p:*Sound)[2]f32{
+        var l:usize = 0;
+        var r:usize = 1;
         var retval = [2]f32{0,0};    
         if (p.buffer.len >0 and p.playing){
             var pos = @floatToInt(i64,p.posf);
@@ -186,6 +188,8 @@ const Sound = struct{
                 pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
             }else if (p.posf < start and p.reversed){
+                l = 1;
+                r = 0;
                 p.posf = ende-(start-p.posf);
                 pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
@@ -195,8 +199,8 @@ const Sound = struct{
             }else{
                 p.posf -= p.pitch;
             }
-            retval[0] = p.buffer[0][@intCast(usize,pos)]*p.gain;
-            retval[1] = p.buffer[1][@intCast(usize,pos)]*p.gain;
+            retval[0] = p.buffer[l][@intCast(usize,pos)]*p.gain;
+            retval[1] = p.buffer[r][@intCast(usize,pos)]*p.gain;
             return retval;
             
         }else{
