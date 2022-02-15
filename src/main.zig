@@ -30,6 +30,7 @@ fn mix()[2]f32{
 fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
     const screenWidth = 450;
     const screenHeight = 560;    
+    const maxDispSamples = 44100*5;
     var smplDisp:[430]c_int=undefined;
 
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
@@ -55,19 +56,35 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
         currentPad = sampler.selectedSound;
 //--------------------------------------------------------------------------------------------------------------------------
 // CALC Sample Display
+        const showSample = true;
         var sbuf = sampler.sounds[currentPad].buffer;
         var sm:usize = 0;
         var em:usize = 0;
         var cm:f64 = 0;
-        if (sbuf.len > 0){
-            const scale = sbuf[0].len/430;
-            sm = @floatToInt(usize,sampler.sounds[currentPad].start)/scale;
-            em = @floatToInt(usize,sampler.sounds[currentPad].end)/scale;
-            cm = sampler.sounds[currentPad].posf/@intToFloat(f64,scale);
-        
+        if (sbuf.len > 0 and showSample){
+            const smplCount =std.math.min(sbuf[0].len,maxDispSamples);
+            const scale = smplCount/430;
+            const realPos = sampler.sounds[currentPad].posf;
+            const realStart = @floatToInt(usize,sampler.sounds[currentPad].start);
+            const realEnd = @floatToInt(usize,sampler.sounds[currentPad].end);
+            const tmp = @floatToInt(usize,realPos/@intToFloat(f64,maxDispSamples));
+            const offset = tmp*maxDispSamples;
+            cm = (realPos-@intToFloat(f64,offset))/@intToFloat(f64,scale);
+            if (realStart>offset and realStart < offset+maxDispSamples){
+                sm = (realStart-offset)/scale;
+            }
+            if (realEnd>offset and realEnd < offset+maxDispSamples){
+                em = (realEnd-offset)/scale;
+            }else{
+                //TODO: not correct
+                em = realEnd;
+            }
+            
             for(smplDisp)|*y,i|{
                 var val:f32 = 0;
-                for(sbuf[0][i*scale..i*scale+scale])|d,j|{
+                const from = std.math.min(sbuf[0].len,offset+i*scale);
+                const to = std.math.min(sbuf[0].len,offset+i*scale+scale);
+                for(sbuf[0][from..to])|d,j|{
                     const l = std.math.absFloat(d);
                     const r = std.math.absFloat(sbuf[1][j]);
                     val = std.math.max((l+r),val);
@@ -139,6 +156,7 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
         ray.ClearBackground(ray.RAYWHITE);
         ray.DrawRectangle(10, 4, 430, 50, ray.GRAY);
         ray.DrawRectangleLines(10, 4, 430, 50, ray.RED);
+        
         for(smplDisp)|y,x|{
             if (x<sm or x>em){
                 ray.DrawLine(@intCast(c_int,x+10),29+y,@intCast(c_int,x+10),29-y,ray.DARKGRAY);
@@ -147,9 +165,10 @@ fn drawWindow(samplers:*smplr.Sampler,menu:*mn.Menu) !void {
             }
             
         }
-        var ph = @floatToInt(c_int,cm);
+        
         var sm_c = @intCast(c_int,sm);
         var em_c = @intCast(c_int,em);
+        var ph = @floatToInt(c_int,cm);
         ray.DrawLine(10+ph,4,10+ph,54,ray.RED);
         ray.DrawLine(10+sm_c,4,10+sm_c,54,ray.ORANGE);
         ray.DrawLine(10+em_c,4,10+em_c,54,ray.ORANGE);
