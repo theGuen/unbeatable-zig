@@ -1,6 +1,6 @@
 const std = @import("std");
 const ma = @cImport(@cInclude("miniaudio.h"));
-const mfx = @cImport(@cInclude("multifx2.h"));
+const mfx = @cImport(@cInclude("multifx22.h"));
 const ui = @import("UIGlue.zig");
 const rcdr = @import("recorder.zig");
 
@@ -89,19 +89,40 @@ fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyop
     _ = input;
     _ = device;
     var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
+    //Should we reuse the samebuffer?
+    var mixBuffer = allocator.alloc([*c]f32,2)catch return {};
+    var l = allocator.alloc(f32,frame_count)catch return {};
+    var r = allocator.alloc(f32,frame_count)catch return {};
+    defer allocator.free(l);
+    defer allocator.free(r);
+    defer allocator.free(mixBuffer);
+
     for (outw[0 .. frame_count])|_,i|{
         const temp = mix();
-        outw[i*2] = temp[0];
-        outw[i*2+1] = temp[1];
+        l[i]=temp[0];
+        r[i]=temp[1];
     }
+    mixBuffer[0]= @ptrCast([*c]f32, @alignCast(@alignOf([]f32), l));
+    mixBuffer[1]= @ptrCast([*c]f32, @alignCast(@alignOf([]f32), r));
+    
     //apply faust dsp
-    var cc: c_int = @intCast(c_int, frame_count * 2);
-    mfx.computemydsp(fx, cc, outw, outw);
+    var cc2: c_int = @intCast(c_int, frame_count);
+    var outm = @ptrCast([*c][*c]f32, @alignCast(@alignOf([][]f32), mixBuffer));
+    mfx.computemydsp(fx, cc2, outm, outm);
 
+    const rlen = @intCast(usize, frame_count * 2);
+    var rb = allocator.alloc(f32, rlen) catch return {};
+    {
+        var i:usize = 0;
+        while (i <  frame_count){
+            outw[i*2]=l[i];
+            outw[i*2+1]=r[i];
+            rb[i*2] = l[i];
+            rb[i*2+1]=r[i];
+            i+=1;
+        }
+    }
     //send to recorder
-    const l = @intCast(usize, frame_count * 2);
-    var rb = allocator.alloc(f32, l) catch return {};
-    for (outw[0 .. frame_count * 2]) |_, i| rb[i] = outw[i];
     recorder.appendToRecord(rb);
 }
 

@@ -91,7 +91,7 @@ pub const Sampler = struct{
         return self.sounds[self.selectedSound].semis;
     }
     pub fn setSoundStart(self: *Sampler,start:i64)i64{
-        self.sounds[self.selectedSound].start = @intToFloat(f64,@divTrunc(start,2)*2);
+        self.sounds[self.selectedSound].start = @intToFloat(f64,start);
         return start;
     }
     pub fn getSoundStart(self: *Sampler)i64{
@@ -99,7 +99,8 @@ pub const Sampler = struct{
     }
     pub fn setSoundEnd(self: *Sampler,end:i64)i64{
         var sound = &self.sounds[self.selectedSound];
-        sound.end = @intToFloat(f64,@divTrunc(end,2)*2)+1;
+        sound.end = @intToFloat(f64,end);
+        sound.posf = sound.end;
         return end;
     }
     pub fn getSoundEnd(self: *Sampler)i64{
@@ -178,18 +179,16 @@ const Sound = struct{
         var r:usize = 1;
         var retval = [2]f32{0,0};    
         if (p.buffer.len >0 and p.playing){
-            var pos = @floatToInt(i64,p.posf);
             const ende = p.end;
             const start = p.start;
             if(p.posf > ende and !p.reversed){
                 p.posf = p.posf-ende+start;
-                pos = @floatToInt(i64,p.posf);
                 if(!p.looping)p.playing=false;
             }else if (p.posf < start and p.reversed){
-                p.posf = ende-(start-p.posf);
-                pos = @floatToInt(i64,p.posf);
+                p.posf = ende-(start-p.posf);          
                 if(!p.looping)p.playing=false;
             }
+            const pos = @floatToInt(i64,p.posf);
             if (!p.reversed){
                 p.posf +=  p.pitch;
             }else{
