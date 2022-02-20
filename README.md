@@ -26,32 +26,7 @@ then make the folllowing changes to multifx2.h
  #include "CInterface.h"
  ```
  
- and patch the computemydsp function... i should write a wrapper for this...
-
-```
--- void computemydsp(mydsp* dsp, int count, FAUSTFLOAT** inputs, FAUSTFLOAT** outputs) {
-++ // count is the number of samples not frames    
-++ void computemydsp(mydsp* dsp, int countFrames, FAUSTFLOAT* inputs, FAUSTFLOAT* outputs) {    
-       --  FAUSTFLOAT* input0 = inputs[0];
-       -- FAUSTFLOAT* input1 = inputs[1];
-       -- FAUSTFLOAT* output0 = outputs[0];
-       -- FAUSTFLOAT* output1 = outputs[1];
-        ...
-        /* C99 loop */
-        {
-                int i0;
-                -- for (i0 = 0; (i0 < count); i0 = (i0 + 1)) {
-                ++ for (i0 = 0; (i0 < count); i0 = (i0 + 2)) {    
-                    -- float fTemp2 = (float)input0[i0];
-                    ++ float fTemp2 = (float)inputs[i0];
-                    -- float fTemp79 = (float)input1[i0];
-                    ++ float fTemp79 = (float)inputs[i0+1];
-                    -- output0[i0] = (FAUSTFLOAT)(iSlow0 ? fTemp77 : fThen31);
-                    ++ outputs[i0] = (FAUSTFLOAT)(iSlow0 ? fTemp77 : fThen31);
-                    -- output1[i0] = (FAUSTFLOAT)(iSlow0 ? fTemp106 : fThen32);
-                    ++ outputs[i0+1] = (FAUSTFLOAT)(iSlow0 ? fTemp106 : fThen32);
-                    ...
-```
+ and patch the computemydsp function... replace min() with fmin()
 
 The buildUserInterfacemydsp should build a simple cursor menu. KEY_ENTER to enter KEY_BACKSPACE to leave ...
 
@@ -86,7 +61,12 @@ select a destination pad and start recording.
  - Recording will loaded on the destination pad
  - You can still use the old pad while recording...
 
-for now you can load samples on startup
+The File Menu shows a list of folders and mp3/wav files
+ - up/down for selecting an item
+ - right to load mp3/wav or enter directory
+ - left to parent dir
+
+But for now you can also load samples on startup
 
 ```
 >zig-out/bin/unbeatable-zig testdata/drum.wav ...
@@ -122,4 +102,14 @@ Today i made my first little lofi beat.
  Since the samples were prechopped... Sample chopping is the next thing to implement
  
  Sample chopping is done...
- Now we handle left/right seperate. TODO:unpatch faust fx
+
+ Now we handle left/right seperate.
+
+seperate buffers all over the place
+
+little wave-Display for those who don't like to chop by ear
+
+Added a little filemenu
+
+Started building a case for a raspberry pi3 and some arcade buttons 
+If you are intrested have a look in the hardware folder)
