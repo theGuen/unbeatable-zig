@@ -2,6 +2,7 @@ c_examples/
 .vscode/
 zig-cache/
 zig-out/
-project1/
+project*/
 project1_backup/
+project1_final/
 .DS_Store

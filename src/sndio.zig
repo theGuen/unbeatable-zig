@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @cImport(@cInclude("soundio/soundio.h"));
 fn sio_err(err: c_int) !void {
     switch (err) {
-         0 => {},
+        0 => {},
         else => return error.Unknown,
     }
 }
@@ -38,7 +38,7 @@ fn audio_callback(maybe_outstream: ?[*]c.SoundIoOutStream, frame_count_min: c_in
     }
 }
 
-pub fn startAudio()!void{
+pub fn startAudio() !void {
     const soundio = c.soundio_create();
     defer c.soundio_destroy(soundio);
     try sio_err(c.soundio_connect(soundio));
@@ -60,5 +60,5 @@ pub fn startAudio()!void{
 
     try sio_err(c.soundio_outstream_open(outstream));
     try sio_err(c.soundio_outstream_start(outstream));
-    while (!exit()){}
+    while (!exit()) {}
 }

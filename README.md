@@ -1,7 +1,7 @@
 # My first zig project
 Hopefully it will become a drum machine
 
-zig is version 0.9.0 (asdf)
+zig is version 0.11.0 (asdf)
 
 Dependencies installed with brew:
 * libsundio (not used right now)

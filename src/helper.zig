@@ -4,27 +4,29 @@ const ma = @import("miniaudio.zig");
 const smplr = @import("sampler.zig");
 
 pub fn loadCmdLineArgSamples(alloc: std.mem.Allocator, sampler: *smplr.Sampler) !void {
-    var args = process.args();
-    // skip my own exe name
-    _ = args.skip();
-    var i: usize = 0;
-    while (true) {
-        const arg1 = (try args.next(alloc) orelse {
-            break;
-        });
-        var b = try ma.loadAudioFile(alloc, arg1);
-        const split = try smplr.splitSample(alloc, b, b.len);
-        sampler.load(split, i);
-        i += 1;
-        alloc.free(arg1);
-    }
+    _ = sampler;
+    _ = alloc;
+    // var args = process.args();
+    // // skip my own exe name
+    // _ = args.skip();
+    // var i: usize = 0;
+    // while (true) {
+    //     const arg1 = (try args.next(alloc) orelse {
+    //         break;
+    //     });
+    //     var b = try ma.loadAudioFile(alloc, arg1);
+    //     const split = try smplr.splitSample(alloc, b, b.len);
+    //     sampler.load(split, i);
+    //     i += 1;
+    //     alloc.free(arg1);
+    // }
 }
 
 pub fn userInput(samplers: *smplr.Sampler) !void {
     while (true) {
         var buf: [1000]u8 = undefined;
         // We need a 0 terminated string... how unpleasant
-        for (buf) |_, ii| buf[ii] = 0;
+        for (buf,0..) |_, ii| buf[ii] = 0;
         const stdin = std.io.getStdIn().reader();
         if (try stdin.readUntilDelimiterOrEof(buf[0..], '\n')) |user_input| {
             const bla: []u8 = user_input;
@@ -40,7 +42,7 @@ pub fn userInput(samplers: *smplr.Sampler) !void {
 pub fn StringHasSuffix(string: []const u8, suffix: []const u8) bool {
     var retval = true;
     if (suffix.len > string.len) return false;
-    for (suffix) |c, i| {
+    for (suffix,0..) |c, i| {
         retval = retval and (string[string.len - suffix.len + i] == c);
     }
     return retval;
@@ -66,21 +68,21 @@ pub const DirEntry = struct { name: []u8, file: bool, path: []u8 };
 
 pub fn readDirectory(alloc: std.mem.Allocator, path: []const u8) !std.ArrayList(DirEntry) {
     var content = std.ArrayList(DirEntry).init(alloc);
-    var dir: std.fs.Dir = undefined;
+    var dir: std.fs.IterableDir = undefined;
     if (path[0] != '/') {
-        dir = std.fs.cwd().openDir(path, .{ .iterate = true, .access_sub_paths = true }) catch return content;
+        dir = std.fs.cwd().openIterableDir(path, .{ .access_sub_paths = true }) catch return content;
     } else {
         const mPath = StringRemoveNullByte(alloc, path) catch return content;
         defer alloc.free(mPath);
-        std.debug.print("ABS {s} {d}\n", .{ mPath, std.mem.indexOfScalar(u8, mPath, 0) });
+        //std.debug.print("ABS {s} {d}\n", .{ mPath, std.mem.indexOfScalar(u8, mPath, 0) });
 
-        dir = std.fs.openDirAbsolute(mPath, .{ .iterate = true, .access_sub_paths = true }) catch return content;
+        dir = std.fs.openIterableDirAbsolute(mPath, .{ .access_sub_paths = true }) catch return content;
     }
-    const dirName = dir.realpathAlloc(alloc, "./") catch return content;
+    const dirName = dir.dir.realpathAlloc(alloc, "./") catch return content;
 
     var walker = dir.iterate();
     while (try walker.next()) |entry| {
-        if (entry.kind == std.fs.File.Kind.Directory) {
+        if (entry.kind == std.fs.File.Kind.directory) {
             var dest = alloc.alloc(u8, entry.name.len + 1) catch return content;
             dest[entry.name.len] = 0;
             std.mem.copy(u8, dest[0..entry.name.len], entry.name[0..entry.name.len]);

@@ -4,13 +4,15 @@ const mfx = @cImport(@cInclude("multifx22.h"));
 const ui = @import("UIGlue.zig");
 const rcdr = @import("recorder.zig");
 
-pub var startAudioFrame: anyframe = undefined;
+
+const mixerFunction = *const fn () [2]f32;
+//pub var startAudioFrame: anyframe = undefined;
 pub var allocator: std.mem.Allocator = undefined;
-pub var mix: fn () [2]f32 = undefined;
+pub var mix: mixerFunction = undefined;
 pub var fx: [*c]mfx.mydsp = undefined;
 pub var recorder: *rcdr.Recorder = undefined;
 
-pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocator, aMixFunction: fn () [2]f32, aRecorder: *rcdr.Recorder) ![]ui.MenuItem {
+pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocator,  aMixFunction: mixerFunction, aRecorder: *rcdr.Recorder) ![]ui.MenuItem {
     allocator = anAudioAllocator;
     mix = aMixFunction;
     recorder = aRecorder;
@@ -19,14 +21,15 @@ pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocat
     mfx.initmydsp(fx, 44100);
 
     var uiGlue = try ui.newUIGlue();
-    var uiGlue_c = @ptrCast([*c]mfx.UIGlue, uiGlue);
+    var uiGlue_c = @as([*c]mfx.UIGlue,@ptrCast(uiGlue));
     mfx.buildUserInterfacemydsp(fx, uiGlue_c);
     var items = try ui.MenuItemsFromUIGlue(aMenuAllocator, uiGlue);
     return items;
 }
 
 pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
-    var buffer = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), myBuffer));
+    //var buffer = @as([*c]f32,@ptrCast( @alignCast(@alignOf([]f32), myBuffer)));
+    var buffer = @as([*c]f32,@ptrCast( @alignCast( myBuffer)));
     var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
     var encoder = std.mem.zeroes(ma.ma_encoder);
     var r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
@@ -50,7 +53,8 @@ pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !voi
     }
     var pFramesWritten: usize = 0;
     for (list.items) |buf| {
-        var buffer = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), buf));
+        //var buffer = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), buf));
+        var buffer = @as([*c]f32,@ptrCast( @alignCast(buf)));
         _ = ma.ma_encoder_write_pcm_frames(&encoder, buffer, buf.len / 2, &pFramesWritten);
         allocator.free(buf);
     }
@@ -85,17 +89,20 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
     return mybuffer;
 }
 
-fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
+pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
     _ = input;
-    _ = device;
-    var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
+    _ = mydevice;
+    //var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
+    var outw = @as([*c]f32,@ptrCast( @alignCast(out)));
 
     //Should we reuse the samebuffer?
     var mixBuffer = allocator.alloc([*c]f32, 2) catch return {};
     var l = allocator.alloc(f32, frame_count) catch return {};
     var r = allocator.alloc(f32, frame_count) catch return {};
-    mixBuffer[0] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), l));
-    mixBuffer[1] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), r));
+    //mixBuffer[0] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), l));
+    //mixBuffer[1] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), r));
+    mixBuffer[0] = @as([*c]f32,@ptrCast(@alignCast(l)));
+    mixBuffer[1] = @as([*c]f32,@ptrCast(@alignCast(r)));
 
     defer allocator.free(l);
     defer allocator.free(r);
@@ -113,11 +120,12 @@ fn audio_callback(device: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyop
     }
 
     //apply faust dsp
-    var cc2: c_int = @intCast(c_int, frame_count);
-    var outm = @ptrCast([*c][*c]f32, @alignCast(@alignOf([][]f32), mixBuffer));
+    var cc2: c_int = @intCast(frame_count);
+    //var outm = @ptrCast([*c][*c]f32, @alignCast(@alignOf([][]f32), mixBuffer));
+    var outm:[*c][*c]f32 = @ptrCast(@alignCast(mixBuffer));
     mfx.computemydsp(fx, cc2, outm, outm);
 
-    const rlen = @intCast(usize, frame_count * 2);
+    const rlen :usize = @intCast(frame_count * 2);
     var rb = allocator.alloc(f32, rlen) catch return {};
     //The recorder has to free this
 
@@ -149,17 +157,17 @@ pub fn startAudio() !bool {
         std.debug.print("Device init failed:{d}\n", .{r});
         return error.Unknown;
     }
-    defer ma.ma_device_uninit(&device);
+    //defer ma.ma_device_uninit(&device);
 
     r = ma.ma_device_start(&device);
     if (r != ma.MA_SUCCESS) {
         std.debug.print("Could get available frames\n", .{});
         return error.Unknown;
     }
-    defer r = ma.ma_device_stop(&device);
+    //defer r = ma.ma_device_stop(&device);
     std.debug.print("Device internal channels:{d}\n", .{device.playback.internalChannels});
-
+    std.debug.print("Device internal channels:{s}\n", .{device.playback.name});
     //Keep structs alive and suspend... we trust in being resumed
-    suspend startAudioFrame = @frame();
+    //suspend startAudioFrame = @frame();
     return true;
 }

@@ -1,6 +1,6 @@
 /*
 Audio playback and capture library. Choice of public domain or MIT-0. See license statements at the end of this file.
-miniaudio - v0.11.4 - 2022-01-12
+miniaudio - v0.11.21 - 2023-11-15
 
 David Reid - mackron@gmail.com
 
@@ -20,7 +20,7 @@ extern "C" {
 
 #define MA_VERSION_MAJOR    0
 #define MA_VERSION_MINOR    11
-#define MA_VERSION_REVISION 4
+#define MA_VERSION_REVISION 21
 #define MA_VERSION_STRING   MA_XSTRINGIFY(MA_VERSION_MAJOR) "." MA_XSTRINGIFY(MA_VERSION_MINOR) "." MA_XSTRINGIFY(MA_VERSION_REVISION)
 
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -35,7 +35,7 @@ extern "C" {
         #pragma GCC diagnostic ignored "-Wc11-extensions"   /* anonymous unions are a C11 extension */
     #endif
 #endif
-  
+
 
 
 #if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__)) || defined(_M_X64) || defined(__ia64) || defined(_M_IA64) || defined(__aarch64__) || defined(_M_ARM64) || defined(__powerpc64__)
@@ -94,9 +94,24 @@ typedef ma_uint32   ma_bool32;
 #define MA_TRUE     1
 #define MA_FALSE    0
 
+/* These float types are not used universally by miniaudio. It's to simplify some macro expansion for atomic types. */
+typedef float       ma_float;
+typedef double      ma_double;
+
 typedef void* ma_handle;
 typedef void* ma_ptr;
-typedef void (* ma_proc)(void);
+
+/*
+ma_proc is annoying because when compiling with GCC we get pendantic warnings about converting
+between `void*` and `void (*)()`. We can't use `void (*)()` with MSVC however, because we'll get
+warning C4191 about "type cast between incompatible function types". To work around this I'm going
+to use a different data type depending on the compiler.
+*/
+#if defined(__GNUC__)
+typedef void (*ma_proc)(void);
+#else
+typedef void* ma_proc;
+#endif
 
 #if defined(_MSC_VER) && !defined(_WCHAR_T_DEFINED)
 typedef ma_uint16 wchar_t;
@@ -115,16 +130,17 @@ typedef ma_uint16 wchar_t;
 
 
 /* Platform/backend detection. */
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__COSMOPOLITAN__)
     #define MA_WIN32
-    #if defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_PC_APP || WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)
+    #if defined(MA_FORCE_UWP) || (defined(WINAPI_FAMILY) && ((defined(WINAPI_FAMILY_PC_APP) && WINAPI_FAMILY == WINAPI_FAMILY_PC_APP) || (defined(WINAPI_FAMILY_PHONE_APP) && WINAPI_FAMILY == WINAPI_FAMILY_PHONE_APP)))
         #define MA_WIN32_UWP
-    #elif defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_GAMES)
+    #elif defined(WINAPI_FAMILY) && (defined(WINAPI_FAMILY_GAMES) && WINAPI_FAMILY == WINAPI_FAMILY_GAMES)
         #define MA_WIN32_GDK
     #else
         #define MA_WIN32_DESKTOP
     #endif
-#else
+#endif
+#if !defined(_WIN32)    /* If it's not Win32, assume POSIX. */
     #define MA_POSIX
 
     /*
@@ -145,29 +161,64 @@ typedef ma_uint16 wchar_t;
         typedef union           ma_pthread_cond_t  { char __data[48]; ma_uint64 __alignment; } ma_pthread_cond_t;
     #endif
 
-    #ifdef __unix__
+    #if defined(__unix__)
         #define MA_UNIX
-        #if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-            #define MA_BSD
-        #endif
     #endif
-    #ifdef __linux__
+    #if defined(__linux__)
         #define MA_LINUX
     #endif
-    #ifdef __APPLE__
+    #if defined(__APPLE__)
         #define MA_APPLE
     #endif
-    #ifdef __ANDROID__
+    #if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+        #define MA_BSD
+    #endif
+    #if defined(__ANDROID__)
         #define MA_ANDROID
     #endif
-    #ifdef __EMSCRIPTEN__
+    #if defined(__EMSCRIPTEN__)
         #define MA_EMSCRIPTEN
+    #endif
+    #if defined(__ORBIS__)
+        #define MA_ORBIS
+    #endif
+    #if defined(__PROSPERO__)
+        #define MA_PROSPERO
+    #endif
+    #if defined(__NX__)
+        #define MA_NX
+    #endif
+    #if defined(__BEOS__) || defined(__HAIKU__)
+        #define MA_BEOS
+    #endif
+    #if defined(__HAIKU__)
+        #define MA_HAIKU
     #endif
 #endif
 
+#if defined(__has_c_attribute)
+    #if __has_c_attribute(fallthrough)
+        #define MA_FALLTHROUGH [[fallthrough]]
+    #endif
+#endif
+#if !defined(MA_FALLTHROUGH) && defined(__has_attribute) && (defined(__clang__) || defined(__GNUC__))
+    #if __has_attribute(fallthrough)
+        #define MA_FALLTHROUGH __attribute__((fallthrough))
+    #endif
+#endif
+#if !defined(MA_FALLTHROUGH)
+    #define MA_FALLTHROUGH ((void)0)
+#endif
 
 #ifdef _MSC_VER
     #define MA_INLINE __forceinline
+
+    /* noinline was introduced in Visual Studio 2005. */
+    #if _MSC_VER >= 1400
+        #define MA_NO_INLINE __declspec(noinline)
+    #else
+        #define MA_NO_INLINE
+    #endif
 #elif defined(__GNUC__)
     /*
     I've had a bug report where GCC is emitting warnings about functions possibly not being inlineable. This warning happens when
@@ -177,48 +228,83 @@ typedef ma_uint16 wchar_t;
     I am using "__inline__" only when we're compiling in strict ANSI mode.
     */
     #if defined(__STRICT_ANSI__)
-        #define MA_INLINE __inline__ __attribute__((always_inline))
+        #define MA_GNUC_INLINE_HINT __inline__
     #else
-        #define MA_INLINE inline __attribute__((always_inline))
+        #define MA_GNUC_INLINE_HINT inline
+    #endif
+
+    #if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 2)) || defined(__clang__)
+        #define MA_INLINE MA_GNUC_INLINE_HINT __attribute__((always_inline))
+        #define MA_NO_INLINE __attribute__((noinline))
+    #else
+        #define MA_INLINE MA_GNUC_INLINE_HINT
+        #define MA_NO_INLINE __attribute__((noinline))
     #endif
 #elif defined(__WATCOMC__)
     #define MA_INLINE __inline
+    #define MA_NO_INLINE
 #else
     #define MA_INLINE
+    #define MA_NO_INLINE
+#endif
+
+/* MA_DLL is not officially supported. You're on your own if you want to use this. */
+#if defined(MA_DLL)
+    #if defined(_WIN32)
+        #define MA_DLL_IMPORT  __declspec(dllimport)
+        #define MA_DLL_EXPORT  __declspec(dllexport)
+        #define MA_DLL_PRIVATE static
+    #else
+        #if defined(__GNUC__) && __GNUC__ >= 4
+            #define MA_DLL_IMPORT  __attribute__((visibility("default")))
+            #define MA_DLL_EXPORT  __attribute__((visibility("default")))
+            #define MA_DLL_PRIVATE __attribute__((visibility("hidden")))
+        #else
+            #define MA_DLL_IMPORT
+            #define MA_DLL_EXPORT
+            #define MA_DLL_PRIVATE static
+        #endif
+    #endif
 #endif
 
 #if !defined(MA_API)
     #if defined(MA_DLL)
-        #if defined(_WIN32)
-            #define MA_DLL_IMPORT  __declspec(dllimport)
-            #define MA_DLL_EXPORT  __declspec(dllexport)
-            #define MA_DLL_PRIVATE static
-        #else
-            #if defined(__GNUC__) && __GNUC__ >= 4
-                #define MA_DLL_IMPORT  __attribute__((visibility("default")))
-                #define MA_DLL_EXPORT  __attribute__((visibility("default")))
-                #define MA_DLL_PRIVATE __attribute__((visibility("hidden")))
-            #else
-                #define MA_DLL_IMPORT
-                #define MA_DLL_EXPORT
-                #define MA_DLL_PRIVATE static
-            #endif
-        #endif
-
         #if defined(MINIAUDIO_IMPLEMENTATION) || defined(MA_IMPLEMENTATION)
             #define MA_API  MA_DLL_EXPORT
         #else
             #define MA_API  MA_DLL_IMPORT
         #endif
-        #define MA_PRIVATE MA_DLL_PRIVATE
     #else
         #define MA_API extern
+    #endif
+#endif
+
+#if !defined(MA_STATIC)
+    #if defined(MA_DLL)
+        #define MA_PRIVATE MA_DLL_PRIVATE
+    #else
         #define MA_PRIVATE static
     #endif
 #endif
 
+
 /* SIMD alignment in bytes. Currently set to 32 bytes in preparation for future AVX optimizations. */
 #define MA_SIMD_ALIGNMENT  32
+
+/*
+Special wchar_t type to ensure any structures in the public sections that reference it have a
+consistent size across all platforms.
+
+On Windows, wchar_t is 2 bytes, whereas everywhere else it's 4 bytes. Since Windows likes to use
+wchar_t for it's IDs, we need a special explicitly sized wchar type that is always 2 bytes on all
+platforms.
+*/
+#if !defined(MA_POSIX) && defined(MA_WIN32)
+typedef wchar_t     ma_wchar_win32;
+#else
+typedef ma_uint16   ma_wchar_win32;
+#endif
+
 
 
 /*
@@ -264,9 +350,9 @@ implications. Where supported by the compiler, alignment will be used, but other
 architecture does not require it, it will simply leave it unaligned. This is the case with old
 versions of Visual Studio, which I've confirmed with at least VC6.
 */
-#if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#if !defined(_MSC_VER) && defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
     #include <stdalign.h>
-    #define MA_ATOMIC(alignment, type)            alignas(alignment) type
+    #define MA_ATOMIC(alignment, type)            _Alignas(alignment) type
 #else
     #if defined(__GNUC__)
         /* GCC-style compilers. */
@@ -399,32 +485,36 @@ typedef enum
     MA_CANCELLED                      = -51,
     MA_MEMORY_ALREADY_MAPPED          = -52,
 
+    /* General non-standard errors. */
+    MA_CRC_MISMATCH                   = -100,
+
     /* General miniaudio-specific errors. */
-    MA_FORMAT_NOT_SUPPORTED           = -100,
-    MA_DEVICE_TYPE_NOT_SUPPORTED      = -101,
-    MA_SHARE_MODE_NOT_SUPPORTED       = -102,
-    MA_NO_BACKEND                     = -103,
-    MA_NO_DEVICE                      = -104,
-    MA_API_NOT_FOUND                  = -105,
-    MA_INVALID_DEVICE_CONFIG          = -106,
-    MA_LOOP                           = -107,
+    MA_FORMAT_NOT_SUPPORTED           = -200,
+    MA_DEVICE_TYPE_NOT_SUPPORTED      = -201,
+    MA_SHARE_MODE_NOT_SUPPORTED       = -202,
+    MA_NO_BACKEND                     = -203,
+    MA_NO_DEVICE                      = -204,
+    MA_API_NOT_FOUND                  = -205,
+    MA_INVALID_DEVICE_CONFIG          = -206,
+    MA_LOOP                           = -207,
+    MA_BACKEND_NOT_ENABLED            = -208,
 
     /* State errors. */
-    MA_DEVICE_NOT_INITIALIZED         = -200,
-    MA_DEVICE_ALREADY_INITIALIZED     = -201,
-    MA_DEVICE_NOT_STARTED             = -202,
-    MA_DEVICE_NOT_STOPPED             = -203,
+    MA_DEVICE_NOT_INITIALIZED         = -300,
+    MA_DEVICE_ALREADY_INITIALIZED     = -301,
+    MA_DEVICE_NOT_STARTED             = -302,
+    MA_DEVICE_NOT_STOPPED             = -303,
 
     /* Operation errors. */
-    MA_FAILED_TO_INIT_BACKEND         = -300,
-    MA_FAILED_TO_OPEN_BACKEND_DEVICE  = -301,
-    MA_FAILED_TO_START_BACKEND_DEVICE = -302,
-    MA_FAILED_TO_STOP_BACKEND_DEVICE  = -303
+    MA_FAILED_TO_INIT_BACKEND         = -400,
+    MA_FAILED_TO_OPEN_BACKEND_DEVICE  = -401,
+    MA_FAILED_TO_START_BACKEND_DEVICE = -402,
+    MA_FAILED_TO_STOP_BACKEND_DEVICE  = -403
 } ma_result;
 
 
 #define MA_MIN_CHANNELS                 1
-#ifndef MA_MAX_CHANNELS                 
+#ifndef MA_MAX_CHANNELS
 #define MA_MAX_CHANNELS                 254
 #endif
 
@@ -481,7 +571,7 @@ typedef enum
     ma_standard_sample_rate_192000 = 192000,
 
     ma_standard_sample_rate_16000  = 16000,     /* Extreme lows */
-    ma_standard_sample_rate_11025  = 11250,
+    ma_standard_sample_rate_11025  = 11025,
     ma_standard_sample_rate_8000   = 8000,
 
     ma_standard_sample_rate_352800 = 352800,    /* Extreme highs */
@@ -497,7 +587,7 @@ typedef enum
 {
     ma_channel_mix_mode_rectangular = 0,   /* Simple averaging based on the plane(s) the channel is sitting on. */
     ma_channel_mix_mode_simple,            /* Drop excess channels; zeroed out extra channels. */
-    ma_channel_mix_mode_custom_weights,    /* Use custom weights specified in ma_channel_router_config. */
+    ma_channel_mix_mode_custom_weights,    /* Use custom weights specified in ma_channel_converter_config. */
     ma_channel_mix_mode_default = ma_channel_mix_mode_rectangular
 } ma_channel_mix_mode;
 
@@ -535,65 +625,118 @@ typedef struct
 } ma_lcg;
 
 
+/*
+Atomics.
+
+These are typesafe structures to prevent errors as a result of forgetting to reference variables atomically. It's too
+easy to introduce subtle bugs where you accidentally do a regular assignment instead of an atomic load/store, etc. By
+using a struct we can enforce the use of atomics at compile time.
+
+These types are declared in the header section because we need to reference them in structs below, but functions for
+using them are only exposed in the implementation section. I do not want these to be part of the public API.
+
+There's a few downsides to this system. The first is that you need to declare a new struct for each type. Below are
+some macros to help with the declarations. They will be named like so:
+
+    ma_atomic_uint32 - atomic ma_uint32
+    ma_atomic_int32  - atomic ma_int32
+    ma_atomic_uint64 - atomic ma_uint64
+    ma_atomic_float  - atomic float
+    ma_atomic_bool32 - atomic ma_bool32
+
+The other downside is that atomic pointers are extremely messy. You need to declare a new struct for each specific
+type of pointer you need to make atomic. For example, an atomic ma_node* will look like this:
+
+    MA_ATOMIC_SAFE_TYPE_IMPL_PTR(node)
+
+Which will declare a type struct that's named like so:
+
+    ma_atomic_ptr_node
+
+Functions to use the atomic types are declared in the implementation section. All atomic functions are prefixed with
+the name of the struct. For example:
+
+    ma_atomic_uint32_set() - Atomic store of ma_uint32
+    ma_atomic_uint32_get() - Atomic load of ma_uint32
+    etc.
+
+For pointer types it's the same, which makes them a bit messy to use due to the length of each function name, but in
+return you get type safety and enforcement of atomic operations.
+*/
+#define MA_ATOMIC_SAFE_TYPE_DECL(c89TypeExtension, typeSize, type) \
+    typedef struct \
+    { \
+        MA_ATOMIC(typeSize, ma_##type) value; \
+    } ma_atomic_##type; \
+
+#define MA_ATOMIC_SAFE_TYPE_DECL_PTR(type) \
+    typedef struct \
+    { \
+        MA_ATOMIC(MA_SIZEOF_PTR, ma_##type*) value; \
+    } ma_atomic_ptr_##type; \
+
+MA_ATOMIC_SAFE_TYPE_DECL(32,  4, uint32)
+MA_ATOMIC_SAFE_TYPE_DECL(i32, 4, int32)
+MA_ATOMIC_SAFE_TYPE_DECL(64,  8, uint64)
+MA_ATOMIC_SAFE_TYPE_DECL(f32, 4, float)
+MA_ATOMIC_SAFE_TYPE_DECL(32,  4, bool32)
+
+
 /* Spinlocks are 32-bit for compatibility reasons. */
 typedef ma_uint32 ma_spinlock;
 
 #ifndef MA_NO_THREADING
-/* Thread priorities should be ordered such that the default priority of the worker thread is 0. */
-typedef enum
-{
-    ma_thread_priority_idle     = -5,
-    ma_thread_priority_lowest   = -4,
-    ma_thread_priority_low      = -3,
-    ma_thread_priority_normal   = -2,
-    ma_thread_priority_high     = -1,
-    ma_thread_priority_highest  =  0,
-    ma_thread_priority_realtime =  1,
-    ma_thread_priority_default  =  0
-} ma_thread_priority;
+    /* Thread priorities should be ordered such that the default priority of the worker thread is 0. */
+    typedef enum
+    {
+        ma_thread_priority_idle     = -5,
+        ma_thread_priority_lowest   = -4,
+        ma_thread_priority_low      = -3,
+        ma_thread_priority_normal   = -2,
+        ma_thread_priority_high     = -1,
+        ma_thread_priority_highest  =  0,
+        ma_thread_priority_realtime =  1,
+        ma_thread_priority_default  =  0
+    } ma_thread_priority;
 
-#if defined(MA_WIN32)
-typedef ma_handle ma_thread;
-#endif
-#if defined(MA_POSIX)
-typedef ma_pthread_t ma_thread;
-#endif
+    #if defined(MA_POSIX)
+        typedef ma_pthread_t ma_thread;
+    #elif defined(MA_WIN32)
+        typedef ma_handle ma_thread;
+    #endif
 
-#if defined(MA_WIN32)
-typedef ma_handle ma_mutex;
-#endif
-#if defined(MA_POSIX)
-typedef ma_pthread_mutex_t ma_mutex;
-#endif
+    #if defined(MA_POSIX)
+        typedef ma_pthread_mutex_t ma_mutex;
+    #elif defined(MA_WIN32)
+        typedef ma_handle ma_mutex;
+    #endif
 
-#if defined(MA_WIN32)
-typedef ma_handle ma_event;
-#endif
-#if defined(MA_POSIX)
-typedef struct
-{
-    ma_uint32 value;
-    ma_pthread_mutex_t lock;
-    ma_pthread_cond_t cond;
-} ma_event;
-#endif  /* MA_POSIX */
+    #if defined(MA_POSIX)
+        typedef struct
+        {
+            ma_uint32 value;
+            ma_pthread_mutex_t lock;
+            ma_pthread_cond_t cond;
+        } ma_event;
+    #elif defined(MA_WIN32)
+        typedef ma_handle ma_event;
+    #endif
 
-#if defined(MA_WIN32)
-typedef ma_handle ma_semaphore;
-#endif
-#if defined(MA_POSIX)
-typedef struct
-{
-    int value;
-    ma_pthread_mutex_t lock;
-    ma_pthread_cond_t cond;
-} ma_semaphore;
-#endif  /* MA_POSIX */
+    #if defined(MA_POSIX)
+        typedef struct
+        {
+            int value;
+            ma_pthread_mutex_t lock;
+            ma_pthread_cond_t cond;
+        } ma_semaphore;
+    #elif defined(MA_WIN32)
+        typedef ma_handle ma_semaphore;
+    #endif
 #else
-/* MA_NO_THREADING is set which means threading is disabled. Threading is required by some API families. If any of these are enabled we need to throw an error. */
-#ifndef MA_NO_DEVICE_IO
-#error "MA_NO_THREADING cannot be used without MA_NO_DEVICE_IO";
-#endif
+    /* MA_NO_THREADING is set which means threading is disabled. Threading is required by some API families. If any of these are enabled we need to throw an error. */
+    #ifndef MA_NO_DEVICE_IO
+        #error "MA_NO_THREADING cannot be used without MA_NO_DEVICE_IO";
+    #endif
 #endif  /* MA_NO_THREADING */
 
 
@@ -621,7 +764,7 @@ Logging
     #endif
 #endif
 #ifndef MA_ATTRIBUTE_FORMAT
-#define MA_ATTRIBUTE_FORMAT(fmt,va)
+#define MA_ATTRIBUTE_FORMAT(fmt, va)
 #endif
 
 #ifndef MA_MAX_LOG_CALLBACKS
@@ -652,11 +795,6 @@ logLevel (in)
 
 pMessage (in)
     The log message.
-
-
-Remarks
--------
-Do not modify the state of the device from inside the callback.
 */
 typedef void (* ma_log_callback_proc)(void* pUserData, ma_uint32 level, const char* pMessage);
 
@@ -735,6 +873,7 @@ MA_API ma_result ma_biquad_init_preallocated(const ma_biquad_config* pConfig, vo
 MA_API ma_result ma_biquad_init(const ma_biquad_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_biquad* pBQ);
 MA_API void ma_biquad_uninit(ma_biquad* pBQ, const ma_allocation_callbacks* pAllocationCallbacks);
 MA_API ma_result ma_biquad_reinit(const ma_biquad_config* pConfig, ma_biquad* pBQ);
+MA_API ma_result ma_biquad_clear_cache(ma_biquad* pBQ);
 MA_API ma_result ma_biquad_process_pcm_frames(ma_biquad* pBQ, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API ma_uint32 ma_biquad_get_latency(const ma_biquad* pBQ);
 
@@ -773,6 +912,7 @@ MA_API ma_result ma_lpf1_init_preallocated(const ma_lpf1_config* pConfig, void* 
 MA_API ma_result ma_lpf1_init(const ma_lpf1_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_lpf1* pLPF);
 MA_API void ma_lpf1_uninit(ma_lpf1* pLPF, const ma_allocation_callbacks* pAllocationCallbacks);
 MA_API ma_result ma_lpf1_reinit(const ma_lpf1_config* pConfig, ma_lpf1* pLPF);
+MA_API ma_result ma_lpf1_clear_cache(ma_lpf1* pLPF);
 MA_API ma_result ma_lpf1_process_pcm_frames(ma_lpf1* pLPF, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API ma_uint32 ma_lpf1_get_latency(const ma_lpf1* pLPF);
 
@@ -786,6 +926,7 @@ MA_API ma_result ma_lpf2_init_preallocated(const ma_lpf2_config* pConfig, void* 
 MA_API ma_result ma_lpf2_init(const ma_lpf2_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_lpf2* pLPF);
 MA_API void ma_lpf2_uninit(ma_lpf2* pLPF, const ma_allocation_callbacks* pAllocationCallbacks);
 MA_API ma_result ma_lpf2_reinit(const ma_lpf2_config* pConfig, ma_lpf2* pLPF);
+MA_API ma_result ma_lpf2_clear_cache(ma_lpf2* pLPF);
 MA_API ma_result ma_lpf2_process_pcm_frames(ma_lpf2* pLPF, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API ma_uint32 ma_lpf2_get_latency(const ma_lpf2* pLPF);
 
@@ -821,6 +962,7 @@ MA_API ma_result ma_lpf_init_preallocated(const ma_lpf_config* pConfig, void* pH
 MA_API ma_result ma_lpf_init(const ma_lpf_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_lpf* pLPF);
 MA_API void ma_lpf_uninit(ma_lpf* pLPF, const ma_allocation_callbacks* pAllocationCallbacks);
 MA_API ma_result ma_lpf_reinit(const ma_lpf_config* pConfig, ma_lpf* pLPF);
+MA_API ma_result ma_lpf_clear_cache(ma_lpf* pLPF);
 MA_API ma_result ma_lpf_process_pcm_frames(ma_lpf* pLPF, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API ma_uint32 ma_lpf_get_latency(const ma_lpf* pLPF);
 
@@ -1118,7 +1260,7 @@ typedef struct
 {
     ma_delay_config config;
     ma_uint32 cursor;               /* Feedback is written to this cursor. Always equal or in front of the read cursor. */
-    ma_uint32 bufferSizeInFrames;   /* The maximum of config.startDelayInFrames and config.feedbackDelayInFrames. */
+    ma_uint32 bufferSizeInFrames;
     float* pBuffer;
 } ma_delay;
 
@@ -1147,6 +1289,7 @@ typedef struct
 {
     ma_gainer_config config;
     ma_uint32 t;
+    float masterVolume;
     float* pOldGains;
     float* pNewGains;
 
@@ -1162,6 +1305,8 @@ MA_API void ma_gainer_uninit(ma_gainer* pGainer, const ma_allocation_callbacks* 
 MA_API ma_result ma_gainer_process_pcm_frames(ma_gainer* pGainer, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API ma_result ma_gainer_set_gain(ma_gainer* pGainer, float newGain);
 MA_API ma_result ma_gainer_set_gains(ma_gainer* pGainer, float* pNewGains);
+MA_API ma_result ma_gainer_set_master_volume(ma_gainer* pGainer, float volume);
+MA_API ma_result ma_gainer_get_master_volume(const ma_gainer* pGainer, float* pVolume);
 
 
 
@@ -1216,14 +1361,15 @@ typedef struct
     float volumeBeg;            /* If volumeBeg and volumeEnd is equal to 1, no fading happens (ma_fader_process_pcm_frames() will run as a passthrough). */
     float volumeEnd;
     ma_uint64 lengthInFrames;   /* The total length of the fade. */
-    ma_uint64 cursorInFrames;   /* The current time in frames. Incremented by ma_fader_process_pcm_frames(). */
+    ma_int64  cursorInFrames;   /* The current time in frames. Incremented by ma_fader_process_pcm_frames(). Signed because it'll be offset by startOffsetInFrames in set_fade_ex(). */
 } ma_fader;
 
 MA_API ma_result ma_fader_init(const ma_fader_config* pConfig, ma_fader* pFader);
 MA_API ma_result ma_fader_process_pcm_frames(ma_fader* pFader, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
 MA_API void ma_fader_get_data_format(const ma_fader* pFader, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate);
 MA_API void ma_fader_set_fade(ma_fader* pFader, float volumeBeg, float volumeEnd, ma_uint64 lengthInFrames);
-MA_API float ma_fader_get_current_volume(ma_fader* pFader);
+MA_API void ma_fader_set_fade_ex(ma_fader* pFader, float volumeBeg, float volumeEnd, ma_uint64 lengthInFrames, ma_int64 startOffsetInFrames);
+MA_API float ma_fader_get_current_volume(const ma_fader* pFader);
 
 
 
@@ -1234,6 +1380,12 @@ typedef struct
     float y;
     float z;
 } ma_vec3f;
+
+typedef struct
+{
+    ma_vec3f v;
+    ma_spinlock lock;
+} ma_atomic_vec3f;
 
 typedef enum
 {
@@ -1274,9 +1426,9 @@ MA_API ma_spatializer_listener_config ma_spatializer_listener_config_init(ma_uin
 typedef struct
 {
     ma_spatializer_listener_config config;
-    ma_vec3f position;  /* The absolute position of the listener. */
-    ma_vec3f direction; /* The direction the listener is facing. The world up vector is config.worldUp. */
-    ma_vec3f velocity;
+    ma_atomic_vec3f position;  /* The absolute position of the listener. */
+    ma_atomic_vec3f direction; /* The direction the listener is facing. The world up vector is config.worldUp. */
+    ma_atomic_vec3f velocity;
     ma_bool32 isEnabled;
 
     /* Memory management. */
@@ -1323,6 +1475,7 @@ typedef struct
     float coneOuterGain;
     float dopplerFactor;                /* Set to 0 to disable doppler effect. */
     float directionalAttenuationFactor; /* Set to 0 to disable directional attenuation. */
+    float minSpatializationChannelGain; /* The minimal scaling factor to apply to channel gains when accounting for the direction of the sound relative to the listener. Must be in the range of 0..1. Smaller values means more aggressive directional panning, larger values means more subtle directional panning. */
     ma_uint32 gainSmoothTimeInFrames;   /* When the gain of a channel changes during spatialization, the transition will be linearly interpolated over this number of frames. */
 } ma_spatializer_config;
 
@@ -1348,10 +1501,11 @@ typedef struct
     float dopplerFactor;                /* Set to 0 to disable doppler effect. */
     float directionalAttenuationFactor; /* Set to 0 to disable directional attenuation. */
     ma_uint32 gainSmoothTimeInFrames;   /* When the gain of a channel changes during spatialization, the transition will be linearly interpolated over this number of frames. */
-    ma_vec3f position;
-    ma_vec3f direction;
-    ma_vec3f velocity;  /* For doppler effect. */
+    ma_atomic_vec3f position;
+    ma_atomic_vec3f direction;
+    ma_atomic_vec3f velocity;  /* For doppler effect. */
     float dopplerPitch; /* Will be updated by ma_spatializer_process_pcm_frames() and can be used by higher level functions to apply a pitch shift for doppler effect. */
+    float minSpatializationChannelGain;
     ma_gainer gainer;   /* For smooth gain transitions. */
     float* pNewChannelGainsOut; /* An offset of _pHeap. Used by ma_spatializer_process_pcm_frames() to store new channel gains. The number of elements in this array is equal to config.channelsOut. */
 
@@ -1365,6 +1519,8 @@ MA_API ma_result ma_spatializer_init_preallocated(const ma_spatializer_config* p
 MA_API ma_result ma_spatializer_init(const ma_spatializer_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_spatializer* pSpatializer);
 MA_API void ma_spatializer_uninit(ma_spatializer* pSpatializer, const ma_allocation_callbacks* pAllocationCallbacks);
 MA_API ma_result ma_spatializer_process_pcm_frames(ma_spatializer* pSpatializer, ma_spatializer_listener* pListener, void* pFramesOut, const void* pFramesIn, ma_uint64 frameCount);
+MA_API ma_result ma_spatializer_set_master_volume(ma_spatializer* pSpatializer, float volume);
+MA_API ma_result ma_spatializer_get_master_volume(const ma_spatializer* pSpatializer, float* pVolume);
 MA_API ma_uint32 ma_spatializer_get_input_channels(const ma_spatializer* pSpatializer);
 MA_API ma_uint32 ma_spatializer_get_output_channels(const ma_spatializer* pSpatializer);
 MA_API void ma_spatializer_set_attenuation_model(ma_spatializer* pSpatializer, ma_attenuation_model attenuationModel);
@@ -1460,6 +1616,7 @@ MA_API ma_uint64 ma_linear_resampler_get_input_latency(const ma_linear_resampler
 MA_API ma_uint64 ma_linear_resampler_get_output_latency(const ma_linear_resampler* pResampler);
 MA_API ma_result ma_linear_resampler_get_required_input_frame_count(const ma_linear_resampler* pResampler, ma_uint64 outputFrameCount, ma_uint64* pInputFrameCount);
 MA_API ma_result ma_linear_resampler_get_expected_output_frame_count(const ma_linear_resampler* pResampler, ma_uint64 inputFrameCount, ma_uint64* pOutputFrameCount);
+MA_API ma_result ma_linear_resampler_reset(ma_linear_resampler* pResampler);
 
 
 typedef struct ma_resampler_config ma_resampler_config;
@@ -1476,6 +1633,7 @@ typedef struct
     ma_uint64 (* onGetOutputLatency           )(void* pUserData, const ma_resampling_backend* pBackend);                                                            /* Optional. Latency will be reported as 0. */
     ma_result (* onGetRequiredInputFrameCount )(void* pUserData, const ma_resampling_backend* pBackend, ma_uint64 outputFrameCount, ma_uint64* pInputFrameCount);   /* Optional. Latency mitigation will be disabled. */
     ma_result (* onGetExpectedOutputFrameCount)(void* pUserData, const ma_resampling_backend* pBackend, ma_uint64 inputFrameCount, ma_uint64* pOutputFrameCount);   /* Optional. Latency mitigation will be disabled. */
+    ma_result (* onReset                      )(void* pUserData, ma_resampling_backend* pBackend);
 } ma_resampling_backend_vtable;
 
 typedef enum
@@ -1536,7 +1694,7 @@ MA_API void ma_resampler_uninit(ma_resampler* pResampler, const ma_allocation_ca
 /*
 Converts the given input data.
 
-Both the input and output frames must be in the format specified in the config when the resampler was initilized.
+Both the input and output frames must be in the format specified in the config when the resampler was initialized.
 
 On input, [pFrameCountOut] contains the number of output frames to process. On output it contains the number of output frames that
 were actually processed, which may be less than the requested amount which will happen if there's not enough input data. You can use
@@ -1559,7 +1717,7 @@ MA_API ma_result ma_resampler_process_pcm_frames(ma_resampler* pResampler, const
 
 
 /*
-Sets the input and output sample sample rate.
+Sets the input and output sample rate.
 */
 MA_API ma_result ma_resampler_set_rate(ma_resampler* pResampler, ma_uint32 sampleRateIn, ma_uint32 sampleRateOut);
 
@@ -1595,6 +1753,11 @@ input frames.
 */
 MA_API ma_result ma_resampler_get_expected_output_frame_count(const ma_resampler* pResampler, ma_uint64 inputFrameCount, ma_uint64* pOutputFrameCount);
 
+/*
+Resets the resampler's timer and clears it's internal cache.
+*/
+MA_API ma_result ma_resampler_reset(ma_resampler* pResampler);
+
 
 /**************************************************************************************************************************************************************
 
@@ -1627,6 +1790,7 @@ typedef struct
     const ma_channel* pChannelMapIn;
     const ma_channel* pChannelMapOut;
     ma_channel_mix_mode mixingMode;
+    ma_bool32 calculateLFEFromSpatialChannels;  /* When an output LFE channel is present, but no input LFE, set to true to set the output LFE to the average of all spatial channels (LR, FR, etc.). Ignored when an input LFE is present. */
     float** ppWeights;  /* [in][out]. Only used when mixingMode is set to ma_channel_mix_mode_custom_weights. */
 } ma_channel_converter_config;
 
@@ -1679,6 +1843,7 @@ typedef struct
     ma_channel* pChannelMapOut;
     ma_dither_mode ditherMode;
     ma_channel_mix_mode channelMixMode;
+    ma_bool32 calculateLFEFromSpatialChannels;  /* When an output LFE channel is present, but no input LFE, set to true to set the output LFE to the average of all spatial channels (LR, FR, etc.). Ignored when an input LFE is present. */
     float** ppChannelWeights;  /* [in][out]. Only used when mixingMode is set to ma_channel_mix_mode_custom_weights. */
     ma_bool32 allowDynamicSampleRate;
     ma_resampler_config resampling;
@@ -1734,6 +1899,7 @@ MA_API ma_result ma_data_converter_get_required_input_frame_count(const ma_data_
 MA_API ma_result ma_data_converter_get_expected_output_frame_count(const ma_data_converter* pConverter, ma_uint64 inputFrameCount, ma_uint64* pOutputFrameCount);
 MA_API ma_result ma_data_converter_get_input_channel_map(const ma_data_converter* pConverter, ma_channel* pChannelMap, size_t channelMapCap);
 MA_API ma_result ma_data_converter_get_output_channel_map(const ma_data_converter* pConverter, ma_channel* pChannelMap, size_t channelMapCap);
+MA_API ma_result ma_data_converter_reset(ma_data_converter* pConverter);
 
 
 /************************************************************************************************************************************************************
@@ -1858,6 +2024,28 @@ The channel map buffer must have a capacity of at least `channels`.
 */
 MA_API ma_bool32 ma_channel_map_contains_channel_position(ma_uint32 channels, const ma_channel* pChannelMap, ma_channel channelPosition);
 
+/*
+Find a channel position in the given channel map. Returns MA_TRUE if the channel is found; MA_FALSE otherwise. The
+index of the channel is output to `pChannelIndex`.
+
+The channel map buffer must have a capacity of at least `channels`.
+*/
+MA_API ma_bool32 ma_channel_map_find_channel_position(ma_uint32 channels, const ma_channel* pChannelMap, ma_channel channelPosition, ma_uint32* pChannelIndex);
+
+/*
+Generates a string representing the given channel map.
+
+This is for printing and debugging purposes, not serialization/deserialization.
+
+Returns the length of the string, not including the null terminator.
+*/
+MA_API size_t ma_channel_map_to_string(const ma_channel* pChannelMap, ma_uint32 channels, char* pBufferOut, size_t bufferCap);
+
+/*
+Retrieves a human readable version of a channel position.
+*/
+MA_API const char* ma_channel_position_to_string(ma_channel channel);
+
 
 /************************************************************************************************************************************************************
 
@@ -1876,6 +2064,197 @@ This function is useful for one-off bulk conversions, but if you're streaming da
 */
 MA_API ma_uint64 ma_convert_frames(void* pOut, ma_uint64 frameCountOut, ma_format formatOut, ma_uint32 channelsOut, ma_uint32 sampleRateOut, const void* pIn, ma_uint64 frameCountIn, ma_format formatIn, ma_uint32 channelsIn, ma_uint32 sampleRateIn);
 MA_API ma_uint64 ma_convert_frames_ex(void* pOut, ma_uint64 frameCountOut, const void* pIn, ma_uint64 frameCountIn, const ma_data_converter_config* pConfig);
+
+
+/************************************************************************************************************************************************************
+
+Data Source
+
+************************************************************************************************************************************************************/
+typedef void ma_data_source;
+
+#define MA_DATA_SOURCE_SELF_MANAGED_RANGE_AND_LOOP_POINT    0x00000001
+
+typedef struct
+{
+    ma_result (* onRead)(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
+    ma_result (* onSeek)(ma_data_source* pDataSource, ma_uint64 frameIndex);
+    ma_result (* onGetDataFormat)(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
+    ma_result (* onGetCursor)(ma_data_source* pDataSource, ma_uint64* pCursor);
+    ma_result (* onGetLength)(ma_data_source* pDataSource, ma_uint64* pLength);
+    ma_result (* onSetLooping)(ma_data_source* pDataSource, ma_bool32 isLooping);
+    ma_uint32 flags;
+} ma_data_source_vtable;
+
+typedef ma_data_source* (* ma_data_source_get_next_proc)(ma_data_source* pDataSource);
+
+typedef struct
+{
+    const ma_data_source_vtable* vtable;
+} ma_data_source_config;
+
+MA_API ma_data_source_config ma_data_source_config_init(void);
+
+
+typedef struct
+{
+    const ma_data_source_vtable* vtable;
+    ma_uint64 rangeBegInFrames;
+    ma_uint64 rangeEndInFrames;             /* Set to -1 for unranged (default). */
+    ma_uint64 loopBegInFrames;              /* Relative to rangeBegInFrames. */
+    ma_uint64 loopEndInFrames;              /* Relative to rangeBegInFrames. Set to -1 for the end of the range. */
+    ma_data_source* pCurrent;               /* When non-NULL, the data source being initialized will act as a proxy and will route all operations to pCurrent. Used in conjunction with pNext/onGetNext for seamless chaining. */
+    ma_data_source* pNext;                  /* When set to NULL, onGetNext will be used. */
+    ma_data_source_get_next_proc onGetNext; /* Will be used when pNext is NULL. If both are NULL, no next will be used. */
+    MA_ATOMIC(4, ma_bool32) isLooping;
+} ma_data_source_base;
+
+MA_API ma_result ma_data_source_init(const ma_data_source_config* pConfig, ma_data_source* pDataSource);
+MA_API void ma_data_source_uninit(ma_data_source* pDataSource);
+MA_API ma_result ma_data_source_read_pcm_frames(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);   /* Must support pFramesOut = NULL in which case a forward seek should be performed. */
+MA_API ma_result ma_data_source_seek_pcm_frames(ma_data_source* pDataSource, ma_uint64 frameCount, ma_uint64* pFramesSeeked); /* Can only seek forward. Equivalent to ma_data_source_read_pcm_frames(pDataSource, NULL, frameCount, &framesRead); */
+MA_API ma_result ma_data_source_seek_to_pcm_frame(ma_data_source* pDataSource, ma_uint64 frameIndex);
+MA_API ma_result ma_data_source_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
+MA_API ma_result ma_data_source_get_cursor_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pCursor);
+MA_API ma_result ma_data_source_get_length_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pLength);    /* Returns MA_NOT_IMPLEMENTED if the length is unknown or cannot be determined. Decoders can return this. */
+MA_API ma_result ma_data_source_get_cursor_in_seconds(ma_data_source* pDataSource, float* pCursor);
+MA_API ma_result ma_data_source_get_length_in_seconds(ma_data_source* pDataSource, float* pLength);
+MA_API ma_result ma_data_source_set_looping(ma_data_source* pDataSource, ma_bool32 isLooping);
+MA_API ma_bool32 ma_data_source_is_looping(const ma_data_source* pDataSource);
+MA_API ma_result ma_data_source_set_range_in_pcm_frames(ma_data_source* pDataSource, ma_uint64 rangeBegInFrames, ma_uint64 rangeEndInFrames);
+MA_API void ma_data_source_get_range_in_pcm_frames(const ma_data_source* pDataSource, ma_uint64* pRangeBegInFrames, ma_uint64* pRangeEndInFrames);
+MA_API ma_result ma_data_source_set_loop_point_in_pcm_frames(ma_data_source* pDataSource, ma_uint64 loopBegInFrames, ma_uint64 loopEndInFrames);
+MA_API void ma_data_source_get_loop_point_in_pcm_frames(const ma_data_source* pDataSource, ma_uint64* pLoopBegInFrames, ma_uint64* pLoopEndInFrames);
+MA_API ma_result ma_data_source_set_current(ma_data_source* pDataSource, ma_data_source* pCurrentDataSource);
+MA_API ma_data_source* ma_data_source_get_current(const ma_data_source* pDataSource);
+MA_API ma_result ma_data_source_set_next(ma_data_source* pDataSource, ma_data_source* pNextDataSource);
+MA_API ma_data_source* ma_data_source_get_next(const ma_data_source* pDataSource);
+MA_API ma_result ma_data_source_set_next_callback(ma_data_source* pDataSource, ma_data_source_get_next_proc onGetNext);
+MA_API ma_data_source_get_next_proc ma_data_source_get_next_callback(const ma_data_source* pDataSource);
+
+
+typedef struct
+{
+    ma_data_source_base ds;
+    ma_format format;
+    ma_uint32 channels;
+    ma_uint32 sampleRate;
+    ma_uint64 cursor;
+    ma_uint64 sizeInFrames;
+    const void* pData;
+} ma_audio_buffer_ref;
+
+MA_API ma_result ma_audio_buffer_ref_init(ma_format format, ma_uint32 channels, const void* pData, ma_uint64 sizeInFrames, ma_audio_buffer_ref* pAudioBufferRef);
+MA_API void ma_audio_buffer_ref_uninit(ma_audio_buffer_ref* pAudioBufferRef);
+MA_API ma_result ma_audio_buffer_ref_set_data(ma_audio_buffer_ref* pAudioBufferRef, const void* pData, ma_uint64 sizeInFrames);
+MA_API ma_uint64 ma_audio_buffer_ref_read_pcm_frames(ma_audio_buffer_ref* pAudioBufferRef, void* pFramesOut, ma_uint64 frameCount, ma_bool32 loop);
+MA_API ma_result ma_audio_buffer_ref_seek_to_pcm_frame(ma_audio_buffer_ref* pAudioBufferRef, ma_uint64 frameIndex);
+MA_API ma_result ma_audio_buffer_ref_map(ma_audio_buffer_ref* pAudioBufferRef, void** ppFramesOut, ma_uint64* pFrameCount);
+MA_API ma_result ma_audio_buffer_ref_unmap(ma_audio_buffer_ref* pAudioBufferRef, ma_uint64 frameCount);    /* Returns MA_AT_END if the end has been reached. This should be considered successful. */
+MA_API ma_bool32 ma_audio_buffer_ref_at_end(const ma_audio_buffer_ref* pAudioBufferRef);
+MA_API ma_result ma_audio_buffer_ref_get_cursor_in_pcm_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pCursor);
+MA_API ma_result ma_audio_buffer_ref_get_length_in_pcm_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pLength);
+MA_API ma_result ma_audio_buffer_ref_get_available_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pAvailableFrames);
+
+
+
+typedef struct
+{
+    ma_format format;
+    ma_uint32 channels;
+    ma_uint32 sampleRate;
+    ma_uint64 sizeInFrames;
+    const void* pData;  /* If set to NULL, will allocate a block of memory for you. */
+    ma_allocation_callbacks allocationCallbacks;
+} ma_audio_buffer_config;
+
+MA_API ma_audio_buffer_config ma_audio_buffer_config_init(ma_format format, ma_uint32 channels, ma_uint64 sizeInFrames, const void* pData, const ma_allocation_callbacks* pAllocationCallbacks);
+
+typedef struct
+{
+    ma_audio_buffer_ref ref;
+    ma_allocation_callbacks allocationCallbacks;
+    ma_bool32 ownsData;             /* Used to control whether or not miniaudio owns the data buffer. If set to true, pData will be freed in ma_audio_buffer_uninit(). */
+    ma_uint8 _pExtraData[1];        /* For allocating a buffer with the memory located directly after the other memory of the structure. */
+} ma_audio_buffer;
+
+MA_API ma_result ma_audio_buffer_init(const ma_audio_buffer_config* pConfig, ma_audio_buffer* pAudioBuffer);
+MA_API ma_result ma_audio_buffer_init_copy(const ma_audio_buffer_config* pConfig, ma_audio_buffer* pAudioBuffer);
+MA_API ma_result ma_audio_buffer_alloc_and_init(const ma_audio_buffer_config* pConfig, ma_audio_buffer** ppAudioBuffer);  /* Always copies the data. Doesn't make sense to use this otherwise. Use ma_audio_buffer_uninit_and_free() to uninit. */
+MA_API void ma_audio_buffer_uninit(ma_audio_buffer* pAudioBuffer);
+MA_API void ma_audio_buffer_uninit_and_free(ma_audio_buffer* pAudioBuffer);
+MA_API ma_uint64 ma_audio_buffer_read_pcm_frames(ma_audio_buffer* pAudioBuffer, void* pFramesOut, ma_uint64 frameCount, ma_bool32 loop);
+MA_API ma_result ma_audio_buffer_seek_to_pcm_frame(ma_audio_buffer* pAudioBuffer, ma_uint64 frameIndex);
+MA_API ma_result ma_audio_buffer_map(ma_audio_buffer* pAudioBuffer, void** ppFramesOut, ma_uint64* pFrameCount);
+MA_API ma_result ma_audio_buffer_unmap(ma_audio_buffer* pAudioBuffer, ma_uint64 frameCount);    /* Returns MA_AT_END if the end has been reached. This should be considered successful. */
+MA_API ma_bool32 ma_audio_buffer_at_end(const ma_audio_buffer* pAudioBuffer);
+MA_API ma_result ma_audio_buffer_get_cursor_in_pcm_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pCursor);
+MA_API ma_result ma_audio_buffer_get_length_in_pcm_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pLength);
+MA_API ma_result ma_audio_buffer_get_available_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pAvailableFrames);
+
+
+/*
+Paged Audio Buffer
+==================
+A paged audio buffer is made up of a linked list of pages. It's expandable, but not shrinkable. It
+can be used for cases where audio data is streamed in asynchronously while allowing data to be read
+at the same time.
+
+This is lock-free, but not 100% thread safe. You can append a page and read from the buffer across
+simultaneously across different threads, however only one thread at a time can append, and only one
+thread at a time can read and seek.
+*/
+typedef struct ma_paged_audio_buffer_page ma_paged_audio_buffer_page;
+struct ma_paged_audio_buffer_page
+{
+    MA_ATOMIC(MA_SIZEOF_PTR, ma_paged_audio_buffer_page*) pNext;
+    ma_uint64 sizeInFrames;
+    ma_uint8 pAudioData[1];
+};
+
+typedef struct
+{
+    ma_format format;
+    ma_uint32 channels;
+    ma_paged_audio_buffer_page head;                                /* Dummy head for the lock-free algorithm. Always has a size of 0. */
+    MA_ATOMIC(MA_SIZEOF_PTR, ma_paged_audio_buffer_page*) pTail;    /* Never null. Initially set to &head. */
+} ma_paged_audio_buffer_data;
+
+MA_API ma_result ma_paged_audio_buffer_data_init(ma_format format, ma_uint32 channels, ma_paged_audio_buffer_data* pData);
+MA_API void ma_paged_audio_buffer_data_uninit(ma_paged_audio_buffer_data* pData, const ma_allocation_callbacks* pAllocationCallbacks);
+MA_API ma_paged_audio_buffer_page* ma_paged_audio_buffer_data_get_head(ma_paged_audio_buffer_data* pData);
+MA_API ma_paged_audio_buffer_page* ma_paged_audio_buffer_data_get_tail(ma_paged_audio_buffer_data* pData);
+MA_API ma_result ma_paged_audio_buffer_data_get_length_in_pcm_frames(ma_paged_audio_buffer_data* pData, ma_uint64* pLength);
+MA_API ma_result ma_paged_audio_buffer_data_allocate_page(ma_paged_audio_buffer_data* pData, ma_uint64 pageSizeInFrames, const void* pInitialData, const ma_allocation_callbacks* pAllocationCallbacks, ma_paged_audio_buffer_page** ppPage);
+MA_API ma_result ma_paged_audio_buffer_data_free_page(ma_paged_audio_buffer_data* pData, ma_paged_audio_buffer_page* pPage, const ma_allocation_callbacks* pAllocationCallbacks);
+MA_API ma_result ma_paged_audio_buffer_data_append_page(ma_paged_audio_buffer_data* pData, ma_paged_audio_buffer_page* pPage);
+MA_API ma_result ma_paged_audio_buffer_data_allocate_and_append_page(ma_paged_audio_buffer_data* pData, ma_uint32 pageSizeInFrames, const void* pInitialData, const ma_allocation_callbacks* pAllocationCallbacks);
+
+
+typedef struct
+{
+    ma_paged_audio_buffer_data* pData;  /* Must not be null. */
+} ma_paged_audio_buffer_config;
+
+MA_API ma_paged_audio_buffer_config ma_paged_audio_buffer_config_init(ma_paged_audio_buffer_data* pData);
+
+
+typedef struct
+{
+    ma_data_source_base ds;
+    ma_paged_audio_buffer_data* pData;              /* Audio data is read from here. Cannot be null. */
+    ma_paged_audio_buffer_page* pCurrent;
+    ma_uint64 relativeCursor;                       /* Relative to the current page. */
+    ma_uint64 absoluteCursor;
+} ma_paged_audio_buffer;
+
+MA_API ma_result ma_paged_audio_buffer_init(const ma_paged_audio_buffer_config* pConfig, ma_paged_audio_buffer* pPagedAudioBuffer);
+MA_API void ma_paged_audio_buffer_uninit(ma_paged_audio_buffer* pPagedAudioBuffer);
+MA_API ma_result ma_paged_audio_buffer_read_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);   /* Returns MA_AT_END if no more pages available. */
+MA_API ma_result ma_paged_audio_buffer_seek_to_pcm_frame(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64 frameIndex);
+MA_API ma_result ma_paged_audio_buffer_get_cursor_in_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64* pCursor);
+MA_API ma_result ma_paged_audio_buffer_get_length_in_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64* pLength);
+
 
 
 /************************************************************************************************************************************************************
@@ -1917,9 +2296,11 @@ MA_API void* ma_rb_get_subbuffer_ptr(ma_rb* pRB, size_t subbufferIndex, void* pB
 
 typedef struct
 {
+    ma_data_source_base ds;
     ma_rb rb;
     ma_format format;
     ma_uint32 channels;
+    ma_uint32 sampleRate; /* Not required for the ring buffer itself, but useful for associating the data with some sample rate, particularly for data sources. */
 } ma_pcm_rb;
 
 MA_API ma_result ma_pcm_rb_init_ex(ma_format format, ma_uint32 channels, ma_uint32 subbufferSizeInFrames, ma_uint32 subbufferCount, ma_uint32 subbufferStrideInFrames, void* pOptionalPreallocatedBuffer, const ma_allocation_callbacks* pAllocationCallbacks, ma_pcm_rb* pRB);
@@ -1939,6 +2320,10 @@ MA_API ma_uint32 ma_pcm_rb_get_subbuffer_size(ma_pcm_rb* pRB);
 MA_API ma_uint32 ma_pcm_rb_get_subbuffer_stride(ma_pcm_rb* pRB);
 MA_API ma_uint32 ma_pcm_rb_get_subbuffer_offset(ma_pcm_rb* pRB, ma_uint32 subbufferIndex);
 MA_API void* ma_pcm_rb_get_subbuffer_ptr(ma_pcm_rb* pRB, ma_uint32 subbufferIndex, void* pBuffer);
+MA_API ma_format ma_pcm_rb_get_format(const ma_pcm_rb* pRB);
+MA_API ma_uint32 ma_pcm_rb_get_channels(const ma_pcm_rb* pRB);
+MA_API ma_uint32 ma_pcm_rb_get_sample_rate(const ma_pcm_rb* pRB);
+MA_API void ma_pcm_rb_set_sample_rate(ma_pcm_rb* pRB, ma_uint32 sampleRate);
 
 
 /*
@@ -2298,7 +2683,7 @@ struct ma_job
                 /*ma_resource_manager_data_buffer_node**/ void* pDataBufferNode;
                 char* pFilePath;
                 wchar_t* pFilePathW;
-                ma_bool32 decode;                               /* When set to true, the data buffer will be decoded. Otherwise it'll be encoded and will use a decoder for the connector. */
+                ma_uint32 flags;                                /* Resource manager data source flags that were used when initializing the data buffer. */
                 ma_async_notification* pInitNotification;       /* Signalled when the data buffer has been initialized and the format/channels/rate can be retrieved. */
                 ma_async_notification* pDoneNotification;       /* Signalled when the data buffer has been fully decoded. Will be passed through to MA_JOB_TYPE_RESOURCE_MANAGER_PAGE_DATA_BUFFER_NODE when decoding. */
                 ma_fence* pInitFence;                           /* Released when initialization of the decoder is complete. */
@@ -2327,6 +2712,11 @@ struct ma_job
                 ma_async_notification* pDoneNotification;       /* Signalled when the data buffer has been fully decoded. */
                 ma_fence* pInitFence;                           /* Released when the data buffer has been initialized and the format/channels/rate can be retrieved. */
                 ma_fence* pDoneFence;                           /* Released when the data buffer has been fully decoded. */
+                ma_uint64 rangeBegInPCMFrames;
+                ma_uint64 rangeEndInPCMFrames;
+                ma_uint64 loopPointBegInPCMFrames;
+                ma_uint64 loopPointEndInPCMFrames;
+                ma_uint32 isLooping;
             } loadDataBuffer;
             struct
             {
@@ -2444,25 +2834,26 @@ This section contains the APIs for device playback and capture. Here is where yo
 /* Some backends are only supported on certain platforms. */
 #if defined(MA_WIN32)
     #define MA_SUPPORT_WASAPI
-    #if defined(MA_WIN32_DESKTOP)  /* DirectSound and WinMM backends are only supported on desktops. */
+
+    #if defined(MA_WIN32_DESKTOP)   /* DirectSound and WinMM backends are only supported on desktops. */
         #define MA_SUPPORT_DSOUND
         #define MA_SUPPORT_WINMM
-        #define MA_SUPPORT_JACK    /* JACK is technically supported on Windows, but I don't know how many people use it in practice... */
+
+        /* Don't enable JACK here if compiling with Cosmopolitan. It'll be enabled in the Linux section below. */
+        #if !defined(__COSMOPOLITAN__)
+            #define MA_SUPPORT_JACK    /* JACK is technically supported on Windows, but I don't know how many people use it in practice... */
+        #endif
     #endif
 #endif
-#if defined(MA_UNIX)
+#if defined(MA_UNIX) && !defined(MA_ORBIS) && !defined(MA_PROSPERO)
     #if defined(MA_LINUX)
-        #if !defined(MA_ANDROID)   /* ALSA is not supported on Android. */
+        #if !defined(MA_ANDROID) && !defined(__COSMOPOLITAN__)   /* ALSA is not supported on Android. */
             #define MA_SUPPORT_ALSA
         #endif
     #endif
     #if !defined(MA_BSD) && !defined(MA_ANDROID) && !defined(MA_EMSCRIPTEN)
         #define MA_SUPPORT_PULSEAUDIO
         #define MA_SUPPORT_JACK
-    #endif
-    #if defined(MA_ANDROID)
-        #define MA_SUPPORT_AAUDIO
-        #define MA_SUPPORT_OPENSL
     #endif
     #if defined(__OpenBSD__)        /* <-- Change this to "#if defined(MA_BSD)" to enable sndio on all BSD flavors. */
         #define MA_SUPPORT_SNDIO    /* sndio is only supported on OpenBSD for now. May be expanded later if there's demand. */
@@ -2473,6 +2864,10 @@ This section contains the APIs for device playback and capture. Here is where yo
     #if defined(__FreeBSD__) || defined(__DragonFly__)
         #define MA_SUPPORT_OSS      /* Only support OSS on specific platforms with known support. */
     #endif
+#endif
+#if defined(MA_ANDROID)
+    #define MA_SUPPORT_AAUDIO
+    #define MA_SUPPORT_OPENSL
 #endif
 #if defined(MA_APPLE)
     #define MA_SUPPORT_COREAUDIO
@@ -2545,6 +2940,9 @@ typedef enum
     ma_device_state_stopping      = 4   /* Transitioning from a started state to stopped. */
 } ma_device_state;
 
+MA_ATOMIC_SAFE_TYPE_DECL(i32, 4, device_state)
+
+
 #ifdef MA_SUPPORT_WASAPI
 /* We need a IMMNotificationClient object for WASAPI. */
 typedef struct
@@ -2615,7 +3013,8 @@ typedef enum
     ma_device_notification_type_stopped,
     ma_device_notification_type_rerouted,
     ma_device_notification_type_interruption_began,
-    ma_device_notification_type_interruption_ended
+    ma_device_notification_type_interruption_ended,
+    ma_device_notification_type_unlocked
 } ma_device_notification_type;
 
 typedef struct
@@ -2737,7 +3136,7 @@ DEPRECATED. Use ma_device_notification_proc instead.
 The callback for when the device has been stopped.
 
 This will be called when the device is stopped explicitly with `ma_device_stop()` and also called implicitly when the device is stopped through external forces
-such as being unplugged or an internal error occuring.
+such as being unplugged or an internal error occurring.
 
 
 Parameters
@@ -2769,7 +3168,7 @@ typedef enum
 /* iOS/tvOS/watchOS session categories. */
 typedef enum
 {
-    ma_ios_session_category_default = 0,        /* AVAudioSessionCategoryPlayAndRecord with AVAudioSessionCategoryOptionDefaultToSpeaker. */
+    ma_ios_session_category_default = 0,        /* AVAudioSessionCategoryPlayAndRecord. */
     ma_ios_session_category_none,               /* Leave the session category unchanged. */
     ma_ios_session_category_ambient,            /* AVAudioSessionCategoryAmbient */
     ma_ios_session_category_solo_ambient,       /* AVAudioSessionCategorySoloAmbient */
@@ -2814,36 +3213,44 @@ typedef enum
     ma_opensl_recording_preset_voice_unprocessed    /* SL_ANDROID_RECORDING_PRESET_UNPROCESSED */
 } ma_opensl_recording_preset;
 
+/* WASAPI audio thread priority characteristics. */
+typedef enum
+{
+    ma_wasapi_usage_default = 0,
+    ma_wasapi_usage_games,
+    ma_wasapi_usage_pro_audio,
+} ma_wasapi_usage;
+
 /* AAudio usage types. */
 typedef enum
 {
     ma_aaudio_usage_default = 0,                    /* Leaves the usage type unset. */
-    ma_aaudio_usage_announcement,                   /* AAUDIO_SYSTEM_USAGE_ANNOUNCEMENT */
-    ma_aaudio_usage_emergency,                      /* AAUDIO_SYSTEM_USAGE_EMERGENCY */
-    ma_aaudio_usage_safety,                         /* AAUDIO_SYSTEM_USAGE_SAFETY */
-    ma_aaudio_usage_vehicle_status,                 /* AAUDIO_SYSTEM_USAGE_VEHICLE_STATUS */
+    ma_aaudio_usage_media,                          /* AAUDIO_USAGE_MEDIA */
+    ma_aaudio_usage_voice_communication,            /* AAUDIO_USAGE_VOICE_COMMUNICATION */
+    ma_aaudio_usage_voice_communication_signalling, /* AAUDIO_USAGE_VOICE_COMMUNICATION_SIGNALLING */
     ma_aaudio_usage_alarm,                          /* AAUDIO_USAGE_ALARM */
+    ma_aaudio_usage_notification,                   /* AAUDIO_USAGE_NOTIFICATION */
+    ma_aaudio_usage_notification_ringtone,          /* AAUDIO_USAGE_NOTIFICATION_RINGTONE */
+    ma_aaudio_usage_notification_event,             /* AAUDIO_USAGE_NOTIFICATION_EVENT */
     ma_aaudio_usage_assistance_accessibility,       /* AAUDIO_USAGE_ASSISTANCE_ACCESSIBILITY */
     ma_aaudio_usage_assistance_navigation_guidance, /* AAUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE */
     ma_aaudio_usage_assistance_sonification,        /* AAUDIO_USAGE_ASSISTANCE_SONIFICATION */
-    ma_aaudio_usage_assitant,                       /* AAUDIO_USAGE_ASSISTANT */
     ma_aaudio_usage_game,                           /* AAUDIO_USAGE_GAME */
-    ma_aaudio_usage_media,                          /* AAUDIO_USAGE_MEDIA */
-    ma_aaudio_usage_notification,                   /* AAUDIO_USAGE_NOTIFICATION */
-    ma_aaudio_usage_notification_event,             /* AAUDIO_USAGE_NOTIFICATION_EVENT */
-    ma_aaudio_usage_notification_ringtone,          /* AAUDIO_USAGE_NOTIFICATION_RINGTONE */
-    ma_aaudio_usage_voice_communication,            /* AAUDIO_USAGE_VOICE_COMMUNICATION */
-    ma_aaudio_usage_voice_communication_signalling  /* AAUDIO_USAGE_VOICE_COMMUNICATION_SIGNALLING */
+    ma_aaudio_usage_assitant,                       /* AAUDIO_USAGE_ASSISTANT */
+    ma_aaudio_usage_emergency,                      /* AAUDIO_SYSTEM_USAGE_EMERGENCY */
+    ma_aaudio_usage_safety,                         /* AAUDIO_SYSTEM_USAGE_SAFETY */
+    ma_aaudio_usage_vehicle_status,                 /* AAUDIO_SYSTEM_USAGE_VEHICLE_STATUS */
+    ma_aaudio_usage_announcement                    /* AAUDIO_SYSTEM_USAGE_ANNOUNCEMENT */
 } ma_aaudio_usage;
 
 /* AAudio content types. */
 typedef enum
 {
     ma_aaudio_content_type_default = 0,             /* Leaves the content type unset. */
-    ma_aaudio_content_type_movie,                   /* AAUDIO_CONTENT_TYPE_MOVIE */
+    ma_aaudio_content_type_speech,                  /* AAUDIO_CONTENT_TYPE_SPEECH */
     ma_aaudio_content_type_music,                   /* AAUDIO_CONTENT_TYPE_MUSIC */
-    ma_aaudio_content_type_sonification,            /* AAUDIO_CONTENT_TYPE_SONIFICATION */
-    ma_aaudio_content_type_speech                   /* AAUDIO_CONTENT_TYPE_SPEECH */
+    ma_aaudio_content_type_movie,                   /* AAUDIO_CONTENT_TYPE_MOVIE */
+    ma_aaudio_content_type_sonification             /* AAUDIO_CONTENT_TYPE_SONIFICATION */
 } ma_aaudio_content_type;
 
 /* AAudio input presets. */
@@ -2852,12 +3259,19 @@ typedef enum
     ma_aaudio_input_preset_default = 0,             /* Leaves the input preset unset. */
     ma_aaudio_input_preset_generic,                 /* AAUDIO_INPUT_PRESET_GENERIC */
     ma_aaudio_input_preset_camcorder,               /* AAUDIO_INPUT_PRESET_CAMCORDER */
-    ma_aaudio_input_preset_unprocessed,             /* AAUDIO_INPUT_PRESET_UNPROCESSED */
     ma_aaudio_input_preset_voice_recognition,       /* AAUDIO_INPUT_PRESET_VOICE_RECOGNITION */
     ma_aaudio_input_preset_voice_communication,     /* AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION */
+    ma_aaudio_input_preset_unprocessed,             /* AAUDIO_INPUT_PRESET_UNPROCESSED */
     ma_aaudio_input_preset_voice_performance        /* AAUDIO_INPUT_PRESET_VOICE_PERFORMANCE */
 } ma_aaudio_input_preset;
 
+typedef enum
+{
+    ma_aaudio_allow_capture_default = 0,            /* Leaves the allowed capture policy unset. */
+    ma_aaudio_allow_capture_by_all,                 /* AAUDIO_ALLOW_CAPTURE_BY_ALL */
+    ma_aaudio_allow_capture_by_system,              /* AAUDIO_ALLOW_CAPTURE_BY_SYSTEM */
+    ma_aaudio_allow_capture_by_none                 /* AAUDIO_ALLOW_CAPTURE_BY_NONE */
+} ma_aaudio_allowed_capture_policy;
 
 typedef union
 {
@@ -2867,7 +3281,7 @@ typedef union
 
 typedef union
 {
-    wchar_t wasapi[64];             /* WASAPI uses a wchar_t string for identification. */
+    ma_wchar_win32 wasapi[64];      /* WASAPI uses a wchar_t string for identification. */
     ma_uint8 dsound[16];            /* DirectSound uses a GUID for identification. */
     /*UINT_PTR*/ ma_uint32 winmm;   /* When creating a device, WinMM expects a Win32 UINT_PTR for device identification. In practice it's actually just a UINT. */
     char alsa[256];                 /* ALSA uses a name string for identification. */
@@ -2926,7 +3340,7 @@ struct ma_device_config
     ma_uint32 periods;
     ma_performance_profile performanceProfile;
     ma_bool8 noPreSilencedOutputBuffer; /* When set to true, the contents of the output buffer passed into the data callback will be left undefined rather than initialized to silence. */
-    ma_bool8 noClip;                    /* When set to true, the contents of the output buffer passed into the data callback will be clipped after returning. Only applies when the playback sample format is f32. */
+    ma_bool8 noClip;                    /* When set to true, the contents of the output buffer passed into the data callback will not be clipped after returning. Only applies when the playback sample format is f32. */
     ma_bool8 noDisableDenormals;        /* Do not disable denormals when firing the data callback. */
     ma_bool8 noFixedSizedCallback;      /* Disables strict fixed-sized data callbacks. Setting this to true will result in the period size being treated only as a hint to the backend. This is an optimization for those who don't need fixed sized callbacks. */
     ma_device_data_proc dataCallback;
@@ -2941,6 +3355,7 @@ struct ma_device_config
         ma_uint32 channels;
         ma_channel* pChannelMap;
         ma_channel_mix_mode channelMixMode;
+        ma_bool32 calculateLFEFromSpatialChannels;  /* When an output LFE channel is present, but no input LFE, set to true to set the output LFE to the average of all spatial channels (LR, FR, etc.). Ignored when an input LFE is present. */
         ma_share_mode shareMode;
     } playback;
     struct
@@ -2950,15 +3365,19 @@ struct ma_device_config
         ma_uint32 channels;
         ma_channel* pChannelMap;
         ma_channel_mix_mode channelMixMode;
+        ma_bool32 calculateLFEFromSpatialChannels;  /* When an output LFE channel is present, but no input LFE, set to true to set the output LFE to the average of all spatial channels (LR, FR, etc.). Ignored when an input LFE is present. */
         ma_share_mode shareMode;
     } capture;
 
     struct
     {
-        ma_bool8 noAutoConvertSRC;     /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM. */
-        ma_bool8 noDefaultQualitySRC;  /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY. */
-        ma_bool8 noAutoStreamRouting;  /* Disables automatic stream routing. */
-        ma_bool8 noHardwareOffloading; /* Disables WASAPI's hardware offloading feature. */
+        ma_wasapi_usage usage;              /* When configured, uses Avrt APIs to set the thread characteristics. */
+        ma_bool8 noAutoConvertSRC;          /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM. */
+        ma_bool8 noDefaultQualitySRC;       /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY. */
+        ma_bool8 noAutoStreamRouting;       /* Disables automatic stream routing. */
+        ma_bool8 noHardwareOffloading;      /* Disables WASAPI's hardware offloading feature. */
+        ma_uint32 loopbackProcessID;        /* The process ID to include or exclude for loopback mode. Set to 0 to capture audio from all processes. Ignored when an explicit device ID is specified. */
+        ma_bool8 loopbackProcessExclude;    /* When set to true, excludes the process specified by loopbackProcessID. By default, the process will be included. */
     } wasapi;
     struct
     {
@@ -2980,19 +3399,22 @@ struct ma_device_config
     {
         ma_opensl_stream_type streamType;
         ma_opensl_recording_preset recordingPreset;
+        ma_bool32 enableCompatibilityWorkarounds;
     } opensl;
     struct
     {
         ma_aaudio_usage usage;
         ma_aaudio_content_type contentType;
         ma_aaudio_input_preset inputPreset;
+        ma_aaudio_allowed_capture_policy allowedCapturePolicy;
         ma_bool32 noAutoStartAfterReroute;
+        ma_bool32 enableCompatibilityWorkarounds;
     } aaudio;
 };
 
 
 /*
-The callback for handling device enumeration. This is fired from `ma_context_enumerated_devices()`.
+The callback for handling device enumeration. This is fired from `ma_context_enumerate_devices()`.
 
 
 Parameters
@@ -3071,7 +3493,7 @@ sample rate. For the channel map, the default should be used when `ma_channel_ma
 `MA_CHANNEL_NONE`). On input, the `periodSizeInFrames` or `periodSizeInMilliseconds` option should always be set. The backend should
 inspect both of these variables. If `periodSizeInFrames` is set, it should take priority, otherwise it needs to be derived from the period
 size in milliseconds (`periodSizeInMilliseconds`) and the sample rate, keeping in mind that the sample rate may be 0, in which case the
-sample rate will need to be determined before calculating the period size in frames. On output, all members of the `ma_device_data_format`
+sample rate will need to be determined before calculating the period size in frames. On output, all members of the `ma_device_descriptor`
 object should be set to a valid value, except for `periodSizeInMilliseconds` which is optional (`periodSizeInFrames` *must* be set).
 
 Starting and stopping of the device is done with `onDeviceStart()` and `onDeviceStop()` and should be self-explanatory. If the backend uses
@@ -3087,7 +3509,7 @@ If the backend requires absolute flexibility with it's data delivery, it can opt
 which will allow it to implement the logic that will run on the audio thread. This is much more advanced and is completely optional.
 
 The audio thread should run data delivery logic in a loop while `ma_device_get_state() == ma_device_state_started` and no errors have been
-encounted. Do not start or stop the device here. That will be handled from outside the `onDeviceDataLoop()` callback.
+encountered. Do not start or stop the device here. That will be handled from outside the `onDeviceDataLoop()` callback.
 
 The invocation of the `onDeviceDataLoop()` callback will be handled by miniaudio. When you start the device, miniaudio will fire this
 callback. When the device is stopped, the `ma_device_get_state() == ma_device_state_started` condition will fail and the loop will be terminated
@@ -3201,6 +3623,11 @@ struct ma_context
             ma_uint32 commandIndex;
             ma_uint32 commandCount;
             ma_context_command__wasapi commands[4];
+            ma_handle hAvrt;
+            ma_proc AvSetMmThreadCharacteristicsA;
+            ma_proc AvRevertMmThreadcharacteristics;
+            ma_handle hMMDevapi;
+            ma_proc ActivateAudioInterfaceAsync;
         } wasapi;
 #endif
 #ifdef MA_SUPPORT_DSOUND
@@ -3495,6 +3922,7 @@ struct ma_context
             ma_proc AAudioStreamBuilder_setUsage;
             ma_proc AAudioStreamBuilder_setContentType;
             ma_proc AAudioStreamBuilder_setInputPreset;
+            ma_proc AAudioStreamBuilder_setAllowedCapturePolicy;
             ma_proc AAudioStreamBuilder_openStream;
             ma_proc AAudioStream_close;
             ma_proc AAudioStream_getState;
@@ -3540,10 +3968,11 @@ struct ma_context
 
     union
     {
-#ifdef MA_WIN32
+#if defined(MA_WIN32)
         struct
         {
             /*HMODULE*/ ma_handle hOle32DLL;
+            ma_proc CoInitialize;
             ma_proc CoInitializeEx;
             ma_proc CoUninitialize;
             ma_proc CoCreateInstance;
@@ -3559,27 +3988,14 @@ struct ma_context
             ma_proc RegOpenKeyExA;
             ma_proc RegCloseKey;
             ma_proc RegQueryValueExA;
+
+            /*HRESULT*/ long CoInitializeResult;
         } win32;
 #endif
 #ifdef MA_POSIX
         struct
         {
-            ma_handle pthreadSO;
-            ma_proc pthread_create;
-            ma_proc pthread_join;
-            ma_proc pthread_mutex_init;
-            ma_proc pthread_mutex_destroy;
-            ma_proc pthread_mutex_lock;
-            ma_proc pthread_mutex_unlock;
-            ma_proc pthread_cond_init;
-            ma_proc pthread_cond_destroy;
-            ma_proc pthread_cond_wait;
-            ma_proc pthread_cond_signal;
-            ma_proc pthread_attr_init;
-            ma_proc pthread_attr_destroy;
-            ma_proc pthread_attr_setschedpolicy;
-            ma_proc pthread_attr_getschedparam;
-            ma_proc pthread_attr_setschedparam;
+            int _unused;
         } posix;
 #endif
         int _unused;
@@ -3591,7 +4007,7 @@ struct ma_device
     ma_context* pContext;
     ma_device_type type;
     ma_uint32 sampleRate;
-    MA_ATOMIC(4, ma_device_state) state;        /* The state of the device is variable and can change at any time on any thread. Must be used atomically. */
+    ma_atomic_device_state state;               /* The state of the device is variable and can change at any time on any thread. Must be used atomically. */
     ma_device_data_proc onData;                 /* Set once at initialization time and should not be changed after. */
     ma_device_notification_proc onNotification; /* Set once at initialization time and should not be changed after. */
     ma_stop_proc onStop;                        /* DEPRECATED. Use the notification callback instead. Set once at initialization time and should not be changed after. */
@@ -3607,7 +4023,7 @@ struct ma_device
     ma_bool8 noClip;
     ma_bool8 noDisableDenormals;
     ma_bool8 noFixedSizedCallback;
-    MA_ATOMIC(4, float) masterVolumeFactor;     /* Linear 0..1. Can be read and written simultaneously by different threads. Must be used atomically. */
+    ma_atomic_float masterVolumeFactor;         /* Linear 0..1. Can be read and written simultaneously by different threads. Must be used atomically. */
     ma_duplex_rb duplexRB;                      /* Intermediary buffer for duplex device on asynchronous backends. */
     struct
     {
@@ -3635,6 +4051,7 @@ struct ma_device
         ma_uint32 internalPeriodSizeInFrames;
         ma_uint32 internalPeriods;
         ma_channel_mix_mode channelMixMode;
+        ma_bool32 calculateLFEFromSpatialChannels;
         ma_data_converter converter;
         void* pIntermediaryBuffer;          /* For implementing fixed sized buffer callbacks. Will be null if using variable sized callbacks. */
         ma_uint32 intermediaryBufferCap;
@@ -3660,6 +4077,7 @@ struct ma_device
         ma_uint32 internalPeriodSizeInFrames;
         ma_uint32 internalPeriods;
         ma_channel_mix_mode channelMixMode;
+        ma_bool32 calculateLFEFromSpatialChannels;
         ma_data_converter converter;
         void* pIntermediaryBuffer;          /* For implementing fixed sized buffer callbacks. Will be null if using variable sized callbacks. */
         ma_uint32 intermediaryBufferCap;
@@ -3679,16 +4097,24 @@ struct ma_device
             ma_IMMNotificationClient notificationClient;
             /*HANDLE*/ ma_handle hEventPlayback;                    /* Auto reset. Initialized to signaled. */
             /*HANDLE*/ ma_handle hEventCapture;                     /* Auto reset. Initialized to unsignaled. */
-            ma_uint32 actualPeriodSizeInFramesPlayback;             /* Value from GetBufferSize(). internalPeriodSizeInFrames is not set to the _actual_ buffer size when low-latency shared mode is being used due to the way the IAudioClient3 API works. */
-            ma_uint32 actualPeriodSizeInFramesCapture;
+            ma_uint32 actualBufferSizeInFramesPlayback;             /* Value from GetBufferSize(). internalPeriodSizeInFrames is not set to the _actual_ buffer size when low-latency shared mode is being used due to the way the IAudioClient3 API works. */
+            ma_uint32 actualBufferSizeInFramesCapture;
             ma_uint32 originalPeriodSizeInFrames;
             ma_uint32 originalPeriodSizeInMilliseconds;
             ma_uint32 originalPeriods;
             ma_performance_profile originalPerformanceProfile;
             ma_uint32 periodSizeInFramesPlayback;
             ma_uint32 periodSizeInFramesCapture;
-            MA_ATOMIC(4, ma_bool32) isStartedCapture;               /* Can be read and written simultaneously across different threads. Must be used atomically, and must be 32-bit. */
-            MA_ATOMIC(4, ma_bool32) isStartedPlayback;              /* Can be read and written simultaneously across different threads. Must be used atomically, and must be 32-bit. */
+            void* pMappedBufferCapture;
+            ma_uint32 mappedBufferCaptureCap;
+            ma_uint32 mappedBufferCaptureLen;
+            void* pMappedBufferPlayback;
+            ma_uint32 mappedBufferPlaybackCap;
+            ma_uint32 mappedBufferPlaybackLen;
+            ma_atomic_bool32 isStartedCapture;                      /* Can be read and written simultaneously across different threads. Must be used atomically, and must be 32-bit. */
+            ma_atomic_bool32 isStartedPlayback;                     /* Can be read and written simultaneously across different threads. Must be used atomically, and must be 32-bit. */
+            ma_uint32 loopbackProcessID;
+            ma_bool8 loopbackProcessExclude;
             ma_bool8 noAutoConvertSRC;                              /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM. */
             ma_bool8 noDefaultQualitySRC;                           /* When set to true, disables the use of AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY. */
             ma_bool8 noHardwareOffloading;
@@ -3696,6 +4122,9 @@ struct ma_device
             ma_bool8 allowPlaybackAutoStreamRouting;
             ma_bool8 isDetachedPlayback;
             ma_bool8 isDetachedCapture;
+            ma_wasapi_usage usage;
+            void* hAvrtHandle;
+            ma_mutex rerouteLock;
         } wasapi;
 #endif
 #ifdef MA_SUPPORT_DSOUND
@@ -3813,6 +4242,7 @@ struct ma_device
             ma_aaudio_usage usage;
             ma_aaudio_content_type contentType;
             ma_aaudio_input_preset inputPreset;
+            ma_aaudio_allowed_capture_policy allowedCapturePolicy;
             ma_bool32 noAutoStartAfterReroute;
         } aaudio;
 #endif
@@ -3838,8 +4268,13 @@ struct ma_device
 #ifdef MA_SUPPORT_WEBAUDIO
         struct
         {
-            int indexPlayback;              /* We use a factory on the JavaScript side to manage devices and use an index for JS/C interop. */
-            int indexCapture;
+            /* AudioWorklets path. */
+            /* EMSCRIPTEN_WEBAUDIO_T */ int audioContext;
+            /* EMSCRIPTEN_WEBAUDIO_T */ int audioWorklet;
+            float* pIntermediaryBuffer;
+            void* pStackBuffer;
+            ma_result initResult;   /* Set to MA_BUSY while initialization is in progress. */
+            int deviceIndex;        /* We store the device in a list on the JavaScript side. This is used to map our C object to the JS object. */
         } webaudio;
 #endif
 #ifdef MA_SUPPORT_NULL
@@ -3857,7 +4292,7 @@ struct ma_device
             ma_uint32 currentPeriodFramesRemainingCapture;
             ma_uint64 lastProcessedFramePlayback;
             ma_uint64 lastProcessedFrameCapture;
-            MA_ATOMIC(4, ma_bool32) isStarted;  /* Read and written by multiple threads. Must be used atomically, and must be 32-bit for compiler compatibility. */
+            ma_atomic_bool32 isStarted; /* Read and written by multiple threads. Must be used atomically, and must be 32-bit for compiler compatibility. */
         } null_device;
 #endif
     };
@@ -4489,17 +4924,17 @@ then be set directly on the structure. Below are the members of the `ma_device_c
         callback will write to every sample in the output buffer, or if you are doing your own clearing.
 
     noClip
-        When set to true, the contents of the output buffer passed into the data callback will be clipped after returning. When set to false (default), the
-        contents of the output buffer are left alone after returning and it will be left up to the backend itself to decide whether or not the clip. This only
+        When set to true, the contents of the output buffer are left alone after returning and it will be left up to the backend itself to decide whether or
+        not to clip. When set to false (default), the contents of the output buffer passed into the data callback will be clipped after returning. This only
         applies when the playback sample format is f32.
 
     noDisableDenormals
         By default, miniaudio will disable denormals when the data callback is called. Setting this to true will prevent the disabling of denormals.
 
     noFixedSizedCallback
-        Allows miniaudio to fire the data callback with any frame count. When this is set to true, the data callback will be fired with a consistent frame
-        count as specified by `periodSizeInFrames` or `periodSizeInMilliseconds`. When set to false, miniaudio will fire the callback with whatever the
-        backend requests, which could be anything.
+        Allows miniaudio to fire the data callback with any frame count. When this is set to false (the default), the data callback will be fired with a
+        consistent frame count as specified by `periodSizeInFrames` or `periodSizeInMilliseconds`. When set to true, miniaudio will fire the callback with
+        whatever the backend requests, which could be anything.
 
     dataCallback
         The callback to fire whenever data is ready to be delivered to or from the device.
@@ -4521,7 +4956,7 @@ then be set directly on the structure. Below are the members of the `ma_device_c
         A pointer that will passed to callbacks in pBackendVTable.
 
     resampling.linear.lpfOrder
-        The linear resampler applies a low-pass filter as part of it's procesing for anti-aliasing. This setting controls the order of the filter. The higher
+        The linear resampler applies a low-pass filter as part of it's processing for anti-aliasing. This setting controls the order of the filter. The higher
         the value, the better the quality, in general. Setting this to 0 will disable low-pass filtering altogether. The maximum value is
         `MA_MAX_FILTER_ORDER`. The default value is `min(4, MA_MAX_FILTER_ORDER)`.
 
@@ -4623,6 +5058,11 @@ then be set directly on the structure. Below are the members of the `ma_device_c
     aaudio.inputPreset
         AAudio only. Explicitly sets the type of recording your program will be doing. When left
         unset, the input preset will be left unchanged.
+
+    aaudio.noAutoStartAfterReroute
+        AAudio only. Controls whether or not the device should be automatically restarted after a
+        stream reroute. When set to false (default) the device will be restarted automatically;
+        otherwise the device will be stopped.
 
 
 Once initialized, the device's config is immutable. If you need to change the config you will need to initialize a new device.
@@ -4997,8 +5437,6 @@ the resuming it with ma_device_start() (which you might do when your program los
 speakers or received from the microphone which can in turn result in de-syncs.
 
 Do not call this in any callback.
-
-This will be called implicitly by `ma_device_uninit()`.
 
 
 See Also
@@ -5435,6 +5873,11 @@ Retrieves a friendly name for a backend.
 MA_API const char* ma_get_backend_name(ma_backend backend);
 
 /*
+Retrieves the backend enum from the given name.
+*/
+MA_API ma_result ma_get_backend_from_name(const char* pBackendName, ma_backend* pBackend);
+
+/*
 Determines whether or not the given backend is available by the compilation environment.
 */
 MA_API ma_bool32 ma_is_backend_enabled(ma_backend backend);
@@ -5523,7 +5966,7 @@ MA_API ma_bool32 ma_is_loopback_supported(ma_backend backend);
 
 /************************************************************************************************************************************************************
 
-Utiltities
+Utilities
 
 ************************************************************************************************************************************************************/
 
@@ -5625,192 +6068,13 @@ Helper for converting gain in decibels to a linear factor.
 MA_API float ma_volume_db_to_linear(float gain);
 
 
-
-
-/**************************************************************************************************
-
-Data Source
-
-**************************************************************************************************/
-typedef void ma_data_source;
-
-#define MA_DATA_SOURCE_SELF_MANAGED_RANGE_AND_LOOP_POINT    0x00000001
-
-typedef struct
-{
-    ma_result (* onRead)(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
-    ma_result (* onSeek)(ma_data_source* pDataSource, ma_uint64 frameIndex);
-    ma_result (* onGetDataFormat)(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
-    ma_result (* onGetCursor)(ma_data_source* pDataSource, ma_uint64* pCursor);
-    ma_result (* onGetLength)(ma_data_source* pDataSource, ma_uint64* pLength);
-    ma_result (* onSetLooping)(ma_data_source* pDataSource, ma_bool32 isLooping);
-    ma_uint32 flags;
-} ma_data_source_vtable;
-
-typedef ma_data_source* (* ma_data_source_get_next_proc)(ma_data_source* pDataSource);
-
-typedef struct
-{
-    const ma_data_source_vtable* vtable;
-} ma_data_source_config;
-
-MA_API ma_data_source_config ma_data_source_config_init(void);
-
-
-typedef struct
-{
-    const ma_data_source_vtable* vtable;
-    ma_uint64 rangeBegInFrames;
-    ma_uint64 rangeEndInFrames;             /* Set to -1 for unranged (default). */
-    ma_uint64 loopBegInFrames;              /* Relative to rangeBegInFrames. */
-    ma_uint64 loopEndInFrames;              /* Relative to rangeBegInFrames. Set to -1 for the end of the range. */
-    ma_data_source* pCurrent;               /* When non-NULL, the data source being initialized will act as a proxy and will route all operations to pCurrent. Used in conjunction with pNext/onGetNext for seamless chaining. */
-    ma_data_source* pNext;                  /* When set to NULL, onGetNext will be used. */
-    ma_data_source_get_next_proc onGetNext; /* Will be used when pNext is NULL. If both are NULL, no next will be used. */
-    MA_ATOMIC(4, ma_bool32) isLooping;
-} ma_data_source_base;
-
-MA_API ma_result ma_data_source_init(const ma_data_source_config* pConfig, ma_data_source* pDataSource);
-MA_API void ma_data_source_uninit(ma_data_source* pDataSource);
-MA_API ma_result ma_data_source_read_pcm_frames(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);   /* Must support pFramesOut = NULL in which case a forward seek should be performed. */
-MA_API ma_result ma_data_source_seek_pcm_frames(ma_data_source* pDataSource, ma_uint64 frameCount, ma_uint64* pFramesSeeked); /* Can only seek forward. Equivalent to ma_data_source_read_pcm_frames(pDataSource, NULL, frameCount, &framesRead); */
-MA_API ma_result ma_data_source_seek_to_pcm_frame(ma_data_source* pDataSource, ma_uint64 frameIndex);
-MA_API ma_result ma_data_source_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
-MA_API ma_result ma_data_source_get_cursor_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pCursor);
-MA_API ma_result ma_data_source_get_length_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pLength);    /* Returns MA_NOT_IMPLEMENTED if the length is unknown or cannot be determined. Decoders can return this. */
-MA_API ma_result ma_data_source_set_looping(ma_data_source* pDataSource, ma_bool32 isLooping);
-MA_API ma_bool32 ma_data_source_is_looping(ma_data_source* pDataSource);
-MA_API ma_result ma_data_source_set_range_in_pcm_frames(ma_data_source* pDataSource, ma_uint64 rangeBegInFrames, ma_uint64 rangeEndInFrames);
-MA_API void ma_data_source_get_range_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pRangeBegInFrames, ma_uint64* pRangeEndInFrames);
-MA_API ma_result ma_data_source_set_loop_point_in_pcm_frames(ma_data_source* pDataSource, ma_uint64 loopBegInFrames, ma_uint64 loopEndInFrames);
-MA_API void ma_data_source_get_loop_point_in_pcm_frames(ma_data_source* pDataSource, ma_uint64* pLoopBegInFrames, ma_uint64* pLoopEndInFrames);
-MA_API ma_result ma_data_source_set_current(ma_data_source* pDataSource, ma_data_source* pCurrentDataSource);
-MA_API ma_data_source* ma_data_source_get_current(ma_data_source* pDataSource);
-MA_API ma_result ma_data_source_set_next(ma_data_source* pDataSource, ma_data_source* pNextDataSource);
-MA_API ma_data_source* ma_data_source_get_next(ma_data_source* pDataSource);
-MA_API ma_result ma_data_source_set_next_callback(ma_data_source* pDataSource, ma_data_source_get_next_proc onGetNext);
-MA_API ma_data_source_get_next_proc ma_data_source_get_next_callback(ma_data_source* pDataSource);
-
-
-typedef struct
-{
-    ma_data_source_base ds;
-    ma_format format;
-    ma_uint32 channels;
-    ma_uint64 cursor;
-    ma_uint64 sizeInFrames;
-    const void* pData;
-} ma_audio_buffer_ref;
-
-MA_API ma_result ma_audio_buffer_ref_init(ma_format format, ma_uint32 channels, const void* pData, ma_uint64 sizeInFrames, ma_audio_buffer_ref* pAudioBufferRef);
-MA_API void ma_audio_buffer_ref_uninit(ma_audio_buffer_ref* pAudioBufferRef);
-MA_API ma_result ma_audio_buffer_ref_set_data(ma_audio_buffer_ref* pAudioBufferRef, const void* pData, ma_uint64 sizeInFrames);
-MA_API ma_uint64 ma_audio_buffer_ref_read_pcm_frames(ma_audio_buffer_ref* pAudioBufferRef, void* pFramesOut, ma_uint64 frameCount, ma_bool32 loop);
-MA_API ma_result ma_audio_buffer_ref_seek_to_pcm_frame(ma_audio_buffer_ref* pAudioBufferRef, ma_uint64 frameIndex);
-MA_API ma_result ma_audio_buffer_ref_map(ma_audio_buffer_ref* pAudioBufferRef, void** ppFramesOut, ma_uint64* pFrameCount);
-MA_API ma_result ma_audio_buffer_ref_unmap(ma_audio_buffer_ref* pAudioBufferRef, ma_uint64 frameCount);    /* Returns MA_AT_END if the end has been reached. This should be considered successful. */
-MA_API ma_bool32 ma_audio_buffer_ref_at_end(const ma_audio_buffer_ref* pAudioBufferRef);
-MA_API ma_result ma_audio_buffer_ref_get_cursor_in_pcm_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pCursor);
-MA_API ma_result ma_audio_buffer_ref_get_length_in_pcm_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pLength);
-MA_API ma_result ma_audio_buffer_ref_get_available_frames(const ma_audio_buffer_ref* pAudioBufferRef, ma_uint64* pAvailableFrames);
-
-
-
-typedef struct
-{
-    ma_format format;
-    ma_uint32 channels;
-    ma_uint64 sizeInFrames;
-    const void* pData;  /* If set to NULL, will allocate a block of memory for you. */
-    ma_allocation_callbacks allocationCallbacks;
-} ma_audio_buffer_config;
-
-MA_API ma_audio_buffer_config ma_audio_buffer_config_init(ma_format format, ma_uint32 channels, ma_uint64 sizeInFrames, const void* pData, const ma_allocation_callbacks* pAllocationCallbacks);
-
-typedef struct
-{
-    ma_audio_buffer_ref ref;
-    ma_allocation_callbacks allocationCallbacks;
-    ma_bool32 ownsData;             /* Used to control whether or not miniaudio owns the data buffer. If set to true, pData will be freed in ma_audio_buffer_uninit(). */
-    ma_uint8 _pExtraData[1];        /* For allocating a buffer with the memory located directly after the other memory of the structure. */
-} ma_audio_buffer;
-
-MA_API ma_result ma_audio_buffer_init(const ma_audio_buffer_config* pConfig, ma_audio_buffer* pAudioBuffer);
-MA_API ma_result ma_audio_buffer_init_copy(const ma_audio_buffer_config* pConfig, ma_audio_buffer* pAudioBuffer);
-MA_API ma_result ma_audio_buffer_alloc_and_init(const ma_audio_buffer_config* pConfig, ma_audio_buffer** ppAudioBuffer);  /* Always copies the data. Doesn't make sense to use this otherwise. Use ma_audio_buffer_uninit_and_free() to uninit. */
-MA_API void ma_audio_buffer_uninit(ma_audio_buffer* pAudioBuffer);
-MA_API void ma_audio_buffer_uninit_and_free(ma_audio_buffer* pAudioBuffer);
-MA_API ma_uint64 ma_audio_buffer_read_pcm_frames(ma_audio_buffer* pAudioBuffer, void* pFramesOut, ma_uint64 frameCount, ma_bool32 loop);
-MA_API ma_result ma_audio_buffer_seek_to_pcm_frame(ma_audio_buffer* pAudioBuffer, ma_uint64 frameIndex);
-MA_API ma_result ma_audio_buffer_map(ma_audio_buffer* pAudioBuffer, void** ppFramesOut, ma_uint64* pFrameCount);
-MA_API ma_result ma_audio_buffer_unmap(ma_audio_buffer* pAudioBuffer, ma_uint64 frameCount);    /* Returns MA_AT_END if the end has been reached. This should be considered successful. */
-MA_API ma_bool32 ma_audio_buffer_at_end(const ma_audio_buffer* pAudioBuffer);
-MA_API ma_result ma_audio_buffer_get_cursor_in_pcm_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pCursor);
-MA_API ma_result ma_audio_buffer_get_length_in_pcm_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pLength);
-MA_API ma_result ma_audio_buffer_get_available_frames(const ma_audio_buffer* pAudioBuffer, ma_uint64* pAvailableFrames);
-
-
 /*
-Paged Audio Buffer
-==================
-A paged audio buffer is made up of a linked list of pages. It's expandable, but not shrinkable. It
-can be used for cases where audio data is streamed in asynchronously while allowing data to be read
-at the same time.
+Mixes the specified number of frames in floating point format with a volume factor.
 
-This is lock-free, but not 100% thread safe. You can append a page and read from the buffer across
-simultaneously across different threads, however only one thread at a time can append, and only one
-thread at a time can read and seek.
+This will run on an optimized path when the volume is equal to 1.
 */
-typedef struct ma_paged_audio_buffer_page ma_paged_audio_buffer_page;
-struct ma_paged_audio_buffer_page
-{
-    MA_ATOMIC(MA_SIZEOF_PTR, ma_paged_audio_buffer_page*) pNext;
-    ma_uint64 sizeInFrames;
-    ma_uint8 pAudioData[1];
-};
+MA_API ma_result ma_mix_pcm_frames_f32(float* pDst, const float* pSrc, ma_uint64 frameCount, ma_uint32 channels, float volume);
 
-typedef struct
-{
-    ma_format format;
-    ma_uint32 channels;
-    ma_paged_audio_buffer_page head;                                /* Dummy head for the lock-free algorithm. Always has a size of 0. */
-    MA_ATOMIC(MA_SIZEOF_PTR, ma_paged_audio_buffer_page*) pTail;    /* Never null. Initially set to &head. */
-} ma_paged_audio_buffer_data;
-
-MA_API ma_result ma_paged_audio_buffer_data_init(ma_format format, ma_uint32 channels, ma_paged_audio_buffer_data* pData);
-MA_API void ma_paged_audio_buffer_data_uninit(ma_paged_audio_buffer_data* pData, const ma_allocation_callbacks* pAllocationCallbacks);
-MA_API ma_paged_audio_buffer_page* ma_paged_audio_buffer_data_get_head(ma_paged_audio_buffer_data* pData);
-MA_API ma_paged_audio_buffer_page* ma_paged_audio_buffer_data_get_tail(ma_paged_audio_buffer_data* pData);
-MA_API ma_result ma_paged_audio_buffer_data_get_length_in_pcm_frames(ma_paged_audio_buffer_data* pData, ma_uint64* pLength);
-MA_API ma_result ma_paged_audio_buffer_data_allocate_page(ma_paged_audio_buffer_data* pData, ma_uint64 pageSizeInFrames, const void* pInitialData, const ma_allocation_callbacks* pAllocationCallbacks, ma_paged_audio_buffer_page** ppPage);
-MA_API ma_result ma_paged_audio_buffer_data_free_page(ma_paged_audio_buffer_data* pData, ma_paged_audio_buffer_page* pPage, const ma_allocation_callbacks* pAllocationCallbacks);
-MA_API ma_result ma_paged_audio_buffer_data_append_page(ma_paged_audio_buffer_data* pData, ma_paged_audio_buffer_page* pPage);
-MA_API ma_result ma_paged_audio_buffer_data_allocate_and_append_page(ma_paged_audio_buffer_data* pData, ma_uint32 pageSizeInFrames, const void* pInitialData, const ma_allocation_callbacks* pAllocationCallbacks);
-
-
-typedef struct
-{
-    ma_paged_audio_buffer_data* pData;  /* Must not be null. */
-} ma_paged_audio_buffer_config;
-
-MA_API ma_paged_audio_buffer_config ma_paged_audio_buffer_config_init(ma_paged_audio_buffer_data* pData);
-
-
-typedef struct
-{
-    ma_data_source_base ds;
-    ma_paged_audio_buffer_data* pData;              /* Audio data is read from here. Cannot be null. */
-    ma_paged_audio_buffer_page* pCurrent;
-    ma_uint64 relativeCursor;                       /* Relative to the current page. */
-    ma_uint64 absoluteCursor;
-} ma_paged_audio_buffer;
-
-MA_API ma_result ma_paged_audio_buffer_init(const ma_paged_audio_buffer_config* pConfig, ma_paged_audio_buffer* pPagedAudioBuffer);
-MA_API void ma_paged_audio_buffer_uninit(ma_paged_audio_buffer* pPagedAudioBuffer);
-MA_API ma_result ma_paged_audio_buffer_read_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);   /* Returns MA_AT_END if no more pages available. */
-MA_API ma_result ma_paged_audio_buffer_seek_to_pcm_frame(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64 frameIndex);
-MA_API ma_result ma_paged_audio_buffer_get_cursor_in_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64* pCursor);
-MA_API ma_result ma_paged_audio_buffer_get_length_in_pcm_frames(ma_paged_audio_buffer* pPagedAudioBuffer, ma_uint64* pLength);
 
 
 
@@ -6096,7 +6360,7 @@ struct ma_encoder
     ma_encoder_uninit_proc onUninit;
     ma_encoder_write_pcm_frames_proc onWritePCMFrames;
     void* pUserData;
-    void* pInternalEncoder; /* <-- The drwav/drflac/stb_vorbis/etc. objects. */
+    void* pInternalEncoder;
     union
     {
         struct
@@ -6161,6 +6425,33 @@ MA_API ma_result ma_waveform_set_frequency(ma_waveform* pWaveform, double freque
 MA_API ma_result ma_waveform_set_type(ma_waveform* pWaveform, ma_waveform_type type);
 MA_API ma_result ma_waveform_set_sample_rate(ma_waveform* pWaveform, ma_uint32 sampleRate);
 
+typedef struct
+{
+    ma_format format;
+    ma_uint32 channels;
+    ma_uint32 sampleRate;
+    double dutyCycle;
+    double amplitude;
+    double frequency;
+} ma_pulsewave_config;
+
+MA_API ma_pulsewave_config ma_pulsewave_config_init(ma_format format, ma_uint32 channels, ma_uint32 sampleRate, double dutyCycle, double amplitude, double frequency);
+
+typedef struct
+{
+    ma_waveform waveform;
+    ma_pulsewave_config config;
+} ma_pulsewave;
+
+MA_API ma_result ma_pulsewave_init(const ma_pulsewave_config* pConfig, ma_pulsewave* pWaveform);
+MA_API void ma_pulsewave_uninit(ma_pulsewave* pWaveform);
+MA_API ma_result ma_pulsewave_read_pcm_frames(ma_pulsewave* pWaveform, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
+MA_API ma_result ma_pulsewave_seek_to_pcm_frame(ma_pulsewave* pWaveform, ma_uint64 frameIndex);
+MA_API ma_result ma_pulsewave_set_amplitude(ma_pulsewave* pWaveform, double amplitude);
+MA_API ma_result ma_pulsewave_set_frequency(ma_pulsewave* pWaveform, double frequency);
+MA_API ma_result ma_pulsewave_set_sample_rate(ma_pulsewave* pWaveform, ma_uint32 sampleRate);
+MA_API ma_result ma_pulsewave_set_duty_cycle(ma_pulsewave* pWaveform, double dutyCycle);
+
 typedef enum
 {
     ma_noise_type_white,
@@ -6183,7 +6474,7 @@ MA_API ma_noise_config ma_noise_config_init(ma_format format, ma_uint32 channels
 
 typedef struct
 {
-    ma_data_source_vtable ds;
+    ma_data_source_base ds;
     ma_noise_config config;
     ma_lcg lcg;
     union
@@ -6237,10 +6528,11 @@ typedef struct ma_resource_manager_data_source      ma_resource_manager_data_sou
 
 typedef enum
 {
-    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_STREAM    = 0x00000001,    /* When set, does not load the entire data source in memory. Disk I/O will happen on job threads. */
-    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_DECODE    = 0x00000002,    /* Decode data before storing in memory. When set, decoding is done at the resource manager level rather than the mixing thread. Results in faster mixing, but higher memory usage. */
-    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_ASYNC     = 0x00000004,    /* When set, the resource manager will load the data source asynchronously. */
-    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_WAIT_INIT = 0x00000008     /* When set, waits for initialization of the underlying data source before returning from ma_resource_manager_data_source_init(). */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_STREAM         = 0x00000001,   /* When set, does not load the entire data source in memory. Disk I/O will happen on job threads. */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_DECODE         = 0x00000002,   /* Decode data before storing in memory. When set, decoding is done at the resource manager level rather than the mixing thread. Results in faster mixing, but higher memory usage. */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_ASYNC          = 0x00000004,   /* When set, the resource manager will load the data source asynchronously. */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_WAIT_INIT      = 0x00000008,   /* When set, waits for initialization of the underlying data source before returning from ma_resource_manager_data_source_init(). */
+    MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_UNKNOWN_LENGTH = 0x00000010    /* Gives the resource manager a hint that the length of the data source is unknown and calling `ma_data_source_get_length_in_pcm_frames()` should be avoided. */
 } ma_resource_manager_data_source_flags;
 
 
@@ -6377,7 +6669,7 @@ struct ma_resource_manager_data_buffer
     ma_bool32 seekToCursorOnNextRead;               /* On the next read we need to seek to the frame cursor. */
     MA_ATOMIC(4, ma_result) result;                 /* Keeps track of a result of decoding. Set to MA_BUSY while the buffer is still loading. Set to MA_SUCCESS when loading is finished successfully. Otherwise set to some other code. */
     MA_ATOMIC(4, ma_bool32) isLooping;              /* Can be read and written by different threads at the same time. Must be used atomically. */
-    ma_bool32 isConnectorInitialized;               /* Used for asynchronous loading to ensure we don't try to initialize the connector multiple times while waiting for the node to fully load. */
+    ma_atomic_bool32 isConnectorInitialized;        /* Used for asynchronous loading to ensure we don't try to initialize the connector multiple times while waiting for the node to fully load. */
     union
     {
         ma_decoder decoder;                 /* Supply type is ma_resource_manager_data_supply_type_encoded */
@@ -6435,6 +6727,7 @@ typedef struct
     ma_uint32 decodedChannels;      /* The decoded channel count to use. Set to 0 (default) to use the file's native channel count. */
     ma_uint32 decodedSampleRate;    /* the decoded sample rate to use. Set to 0 (default) to use the file's native sample rate. */
     ma_uint32 jobThreadCount;       /* Set to 0 if you want to self-manage your job threads. Defaults to 1. */
+    size_t jobThreadStackSize;
     ma_uint32 jobQueueCapacity;     /* The maximum number of jobs that can fit in the queue at a time. Defaults to MA_JOB_TYPE_RESOURCE_MANAGER_QUEUE_CAPACITY. Cannot be zero. */
     ma_uint32 flags;
     ma_vfs* pVFS;                   /* Can be NULL in which case defaults will be used. */
@@ -6579,7 +6872,7 @@ typedef struct
     /*
     Extended processing callback. This callback is used for effects that process input and output
     at different rates (i.e. they perform resampling). This is similar to the simple version, only
-    they take two seperate frame counts: one for input, and one for output.
+    they take two separate frame counts: one for input, and one for output.
 
     On input, `pFrameCountOut` is equal to the capacity of the output buffer for each bus, whereas
     `pFrameCountIn` will be equal to the number of PCM frames in each of the buffers in `ppFramesIn`.
@@ -6643,7 +6936,7 @@ struct ma_node_output_bus
     ma_uint8 channels;                                      /* The number of channels in the audio stream for this bus. */
 
     /* Mutable via multiple threads. Must be used atomically. The weird ordering here is for packing reasons. */
-    MA_ATOMIC(1, ma_uint8) inputNodeInputBusIndex;          /* The index of the input bus on the input. Required for detaching. */
+    ma_uint8 inputNodeInputBusIndex;                        /* The index of the input bus on the input. Required for detaching. Will only be used within the spinlock so does not need to be atomic. */
     MA_ATOMIC(4, ma_uint32) flags;                          /* Some state flags for tracking the read state of the output buffer. A combination of MA_NODE_OUTPUT_BUS_FLAG_*. */
     MA_ATOMIC(4, ma_uint32) refCount;                       /* Reference count for some thread-safety when detaching. */
     MA_ATOMIC(4, ma_bool32) isAttached;                     /* This is used to prevent iteration of nodes that are in the middle of being detached. Used for thread safety. */
@@ -6667,7 +6960,7 @@ struct ma_node_input_bus
     MA_ATOMIC(4, ma_spinlock) lock;         /* Unfortunate lock, but significantly simplifies the implementation. Required for thread-safe attaching and detaching. */
 
     /* Set once at startup. */
-    ma_uint8 channels;                  /* The number of channels in the audio stream for this bus. */
+    ma_uint8 channels;                      /* The number of channels in the audio stream for this bus. */
 };
 
 
@@ -6675,7 +6968,7 @@ typedef struct ma_node_base ma_node_base;
 struct ma_node_base
 {
     /* These variables are set once at startup. */
-    ma_node_graph* pNodeGraph;  /* The graph this node belongs to. */
+    ma_node_graph* pNodeGraph;              /* The graph this node belongs to. */
     const ma_node_vtable* vtable;
     float* pCachedData;                     /* Allocated on the heap. Fixed size. Needs to be stored on the heap because reading from output buses is done in separate function calls. */
     ma_uint16 cachedDataCapInFramesPerBus;  /* The capacity of the input data cache in frames, per bus. */
@@ -6737,6 +7030,7 @@ MA_API ma_node_graph_config ma_node_graph_config_init(ma_uint32 channels);
 struct ma_node_graph
 {
     /* Immutable. */
+    ma_node_base base;                  /* The node graph itself is a node so it can be connected as an input to different node graph. This has zero inputs and calls ma_node_graph_read_pcm_frames() to generate it's output. */
     ma_node_base endpoint;              /* Special node that all nodes eventually connect to. Data is read from this node in ma_node_graph_read_pcm_frames(). */
     ma_uint16 nodeCacheCapInFrames;
 
@@ -6776,11 +7070,12 @@ MA_API ma_result ma_data_source_node_set_looping(ma_data_source_node* pDataSourc
 MA_API ma_bool32 ma_data_source_node_is_looping(ma_data_source_node* pDataSourceNode);
 
 
-/* Splitter Node. 1 input, 2 outputs. Used for splitting/copying a stream so it can be as input into two separate output nodes. */
+/* Splitter Node. 1 input, many outputs. Used for splitting/copying a stream so it can be as input into two separate output nodes. */
 typedef struct
 {
     ma_node_config nodeConfig;
     ma_uint32 channels;
+    ma_uint32 outputBusCount;
 } ma_splitter_node_config;
 
 MA_API ma_splitter_node_config ma_splitter_node_config_init(ma_uint32 channels);
@@ -7005,6 +7300,7 @@ MA_API float ma_delay_node_get_decay(const ma_delay_node* pDelayNode);
 #endif  /* MA_NO_NODE_GRAPH */
 
 
+/* SECTION: miniaudio_engine.h */
 /************************************************************************************************************************************************************
 
 Engine
@@ -7018,13 +7314,17 @@ typedef struct ma_sound  ma_sound;
 /* Sound flags. */
 typedef enum
 {
+    /* Resource manager flags. */
     MA_SOUND_FLAG_STREAM                = 0x00000001,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_STREAM */
     MA_SOUND_FLAG_DECODE                = 0x00000002,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_DECODE */
     MA_SOUND_FLAG_ASYNC                 = 0x00000004,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_ASYNC */
     MA_SOUND_FLAG_WAIT_INIT             = 0x00000008,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_WAIT_INIT */
-    MA_SOUND_FLAG_NO_DEFAULT_ATTACHMENT = 0x00000010,   /* Do not attach to the endpoint by default. Useful for when setting up nodes in a complex graph system. */
-    MA_SOUND_FLAG_NO_PITCH              = 0x00000020,   /* Disable pitch shifting with ma_sound_set_pitch() and ma_sound_group_set_pitch(). This is an optimization. */
-    MA_SOUND_FLAG_NO_SPATIALIZATION     = 0x00000040    /* Disable spatialization. */
+    MA_SOUND_FLAG_UNKNOWN_LENGTH        = 0x00000010,   /* MA_RESOURCE_MANAGER_DATA_SOURCE_FLAG_UNKNOWN_LENGTH */
+
+    /* ma_sound specific flags. */
+    MA_SOUND_FLAG_NO_DEFAULT_ATTACHMENT = 0x00001000,   /* Do not attach to the endpoint by default. Useful for when setting up nodes in a complex graph system. */
+    MA_SOUND_FLAG_NO_PITCH              = 0x00002000,   /* Disable pitch shifting with ma_sound_set_pitch() and ma_sound_group_set_pitch(). This is an optimization. */
+    MA_SOUND_FLAG_NO_SPATIALIZATION     = 0x00004000    /* Disable spatialization. */
 } ma_sound_flags;
 
 #ifndef MA_ENGINE_MAX_LISTENERS
@@ -7046,7 +7346,9 @@ typedef struct
     ma_uint32 channelsIn;
     ma_uint32 channelsOut;
     ma_uint32 sampleRate;               /* Only used when the type is set to ma_engine_node_type_sound. */
-    ma_bool8 isPitchDisabled;           /* Pitching can be explicitly disable with MA_SOUND_FLAG_NO_PITCH to optimize processing. */
+    ma_uint32 volumeSmoothTimeInPCMFrames;  /* The number of frames to smooth over volume changes. Defaults to 0 in which case no smoothing is used. */
+    ma_mono_expansion_mode monoExpansionMode;
+    ma_bool8 isPitchDisabled;           /* Pitching can be explicitly disabled with MA_SOUND_FLAG_NO_PITCH to optimize processing. */
     ma_bool8 isSpatializationDisabled;  /* Spatialization can be explicitly disabled with MA_SOUND_FLAG_NO_SPATIALIZATION. */
     ma_uint8 pinnedListenerIndex;       /* The index of the listener this node should always use for spatialization. If set to MA_LISTENER_INDEX_CLOSEST the engine will use the closest listener. */
 } ma_engine_node_config;
@@ -7060,16 +7362,29 @@ typedef struct
     ma_node_base baseNode;                              /* Must be the first member for compatiblity with the ma_node API. */
     ma_engine* pEngine;                                 /* A pointer to the engine. Set based on the value from the config. */
     ma_uint32 sampleRate;                               /* The sample rate of the input data. For sounds backed by a data source, this will be the data source's sample rate. Otherwise it'll be the engine's sample rate. */
+    ma_uint32 volumeSmoothTimeInPCMFrames;
+    ma_mono_expansion_mode monoExpansionMode;
     ma_fader fader;
     ma_linear_resampler resampler;                      /* For pitch shift. */
     ma_spatializer spatializer;
     ma_panner panner;
+    ma_gainer volumeGainer;                             /* This will only be used if volumeSmoothTimeInPCMFrames is > 0. */
+    ma_atomic_float volume;                             /* Defaults to 1. */
     MA_ATOMIC(4, float) pitch;
     float oldPitch;                                     /* For determining whether or not the resampler needs to be updated to reflect the new pitch. The resampler will be updated on the mixing thread. */
     float oldDopplerPitch;                              /* For determining whether or not the resampler needs to be updated to take a new doppler pitch into account. */
     MA_ATOMIC(4, ma_bool32) isPitchDisabled;            /* When set to true, pitching will be disabled which will allow the resampler to be bypassed to save some computation. */
     MA_ATOMIC(4, ma_bool32) isSpatializationDisabled;   /* Set to false by default. When set to false, will not have spatialisation applied. */
     MA_ATOMIC(4, ma_uint32) pinnedListenerIndex;        /* The index of the listener this node should always use for spatialization. If set to MA_LISTENER_INDEX_CLOSEST the engine will use the closest listener. */
+
+    /* When setting a fade, it's not done immediately in ma_sound_set_fade(). It's deferred to the audio thread which means we need to store the settings here. */
+    struct
+    {
+        ma_atomic_float volumeBeg;
+        ma_atomic_float volumeEnd;
+        ma_atomic_uint64 fadeLengthInFrames;            /* <-- Defaults to (~(ma_uint64)0) which is used to indicate that no fade should be applied. */
+        ma_atomic_uint64 absoluteGlobalTimeInFrames;    /* <-- The time to start the fade. */
+    } fadeSettings;
 
     /* Memory management. */
     ma_bool8 _ownsHeap;
@@ -7084,6 +7399,9 @@ MA_API void ma_engine_node_uninit(ma_engine_node* pEngineNode, const ma_allocati
 
 #define MA_SOUND_SOURCE_CHANNEL_COUNT   0xFFFFFFFF
 
+/* Callback for when a sound reaches the end. */
+typedef void (* ma_sound_end_proc)(void* pUserData, ma_sound* pSound);
+
 typedef struct
 {
     const char* pFilePath;                      /* Set this to load from the resource manager. */
@@ -7093,24 +7411,34 @@ typedef struct
     ma_uint32 initialAttachmentInputBusIndex;   /* The index of the input bus of pInitialAttachment to attach the sound to. */
     ma_uint32 channelsIn;                       /* Ignored if using a data source as input (the data source's channel count will be used always). Otherwise, setting to 0 will cause the engine's channel count to be used. */
     ma_uint32 channelsOut;                      /* Set this to 0 (default) to use the engine's channel count. Set to MA_SOUND_SOURCE_CHANNEL_COUNT to use the data source's channel count (only used if using a data source as input). */
+    ma_mono_expansion_mode monoExpansionMode;   /* Controls how the mono channel should be expanded to other channels when spatialization is disabled on a sound. */
     ma_uint32 flags;                            /* A combination of MA_SOUND_FLAG_* flags. */
+    ma_uint32 volumeSmoothTimeInPCMFrames;      /* The number of frames to smooth over volume changes. Defaults to 0 in which case no smoothing is used. */
     ma_uint64 initialSeekPointInPCMFrames;      /* Initializes the sound such that it's seeked to this location by default. */
     ma_uint64 rangeBegInPCMFrames;
     ma_uint64 rangeEndInPCMFrames;
     ma_uint64 loopPointBegInPCMFrames;
     ma_uint64 loopPointEndInPCMFrames;
     ma_bool32 isLooping;
-    ma_fence* pDoneFence;                       /* Released when the resource manager has finished decoding the entire sound. Not used with streams. */
+    ma_sound_end_proc endCallback;              /* Fired when the sound reaches the end. Will be fired from the audio thread. Do not restart, uninitialize or otherwise change the state of the sound from here. Instead fire an event or set a variable to indicate to a different thread to change the start of the sound. Will not be fired in response to a scheduled stop with ma_sound_set_stop_time_*(). */
+    void* pEndCallbackUserData;
+#ifndef MA_NO_RESOURCE_MANAGER
+    ma_resource_manager_pipeline_notifications initNotifications;
+#endif
+    ma_fence* pDoneFence;                       /* Deprecated. Use initNotifications instead. Released when the resource manager has finished decoding the entire sound. Not used with streams. */
 } ma_sound_config;
 
-MA_API ma_sound_config ma_sound_config_init(void);
+MA_API ma_sound_config ma_sound_config_init(void);                  /* Deprecated. Will be removed in version 0.12. Use ma_sound_config_2() instead. */
+MA_API ma_sound_config ma_sound_config_init_2(ma_engine* pEngine);  /* Will be renamed to ma_sound_config_init() in version 0.12. */
 
 struct ma_sound
 {
     ma_engine_node engineNode;          /* Must be the first member for compatibility with the ma_node API. */
     ma_data_source* pDataSource;
-    ma_uint64 seekTarget;               /* The PCM frame index to seek to in the mixing thread. Set to (~(ma_uint64)0) to not perform any seeking. */
+    MA_ATOMIC(8, ma_uint64) seekTarget; /* The PCM frame index to seek to in the mixing thread. Set to (~(ma_uint64)0) to not perform any seeking. */
     MA_ATOMIC(4, ma_bool32) atEnd;
+    ma_sound_end_proc endCallback;
+    void* pEndCallbackUserData;
     ma_bool8 ownsDataSource;
 
     /*
@@ -7135,32 +7463,39 @@ struct ma_sound_inlined
 typedef ma_sound_config ma_sound_group_config;
 typedef ma_sound        ma_sound_group;
 
-MA_API ma_sound_group_config ma_sound_group_config_init(void);
+MA_API ma_sound_group_config ma_sound_group_config_init(void);                  /* Deprecated. Will be removed in version 0.12. Use ma_sound_config_2() instead. */
+MA_API ma_sound_group_config ma_sound_group_config_init_2(ma_engine* pEngine);  /* Will be renamed to ma_sound_config_init() in version 0.12. */
 
+typedef void (* ma_engine_process_proc)(void* pUserData, float* pFramesOut, ma_uint64 frameCount);
 
 typedef struct
 {
 #if !defined(MA_NO_RESOURCE_MANAGER)
-    ma_resource_manager* pResourceManager;      /* Can be null in which case a resource manager will be created for you. */
+    ma_resource_manager* pResourceManager;          /* Can be null in which case a resource manager will be created for you. */
 #endif
 #if !defined(MA_NO_DEVICE_IO)
     ma_context* pContext;
-    ma_device* pDevice;                         /* If set, the caller is responsible for calling ma_engine_data_callback() in the device's data callback. */
-    ma_device_id* pPlaybackDeviceID;            /* The ID of the playback device to use with the default listener. */
+    ma_device* pDevice;                             /* If set, the caller is responsible for calling ma_engine_data_callback() in the device's data callback. */
+    ma_device_id* pPlaybackDeviceID;                /* The ID of the playback device to use with the default listener. */
+    ma_device_data_proc dataCallback;               /* Can be null. Can be used to provide a custom device data callback. */
+    ma_device_notification_proc notificationCallback;
 #endif
-    ma_log* pLog;                               /* When set to NULL, will use the context's log. */
-    ma_uint32 listenerCount;                    /* Must be between 1 and MA_ENGINE_MAX_LISTENERS. */
-    ma_uint32 channels;                         /* The number of channels to use when mixing and spatializing. When set to 0, will use the native channel count of the device. */
-    ma_uint32 sampleRate;                       /* The sample rate. When set to 0 will use the native channel count of the device. */
-    ma_uint32 periodSizeInFrames;               /* If set to something other than 0, updates will always be exactly this size. The underlying device may be a different size, but from the perspective of the mixer that won't matter.*/
-    ma_uint32 periodSizeInMilliseconds;         /* Used if periodSizeInFrames is unset. */
-    ma_uint32 gainSmoothTimeInFrames;           /* The number of frames to interpolate the gain of spatialized sounds across. If set to 0, will use gainSmoothTimeInMilliseconds. */
-    ma_uint32 gainSmoothTimeInMilliseconds;     /* When set to 0, gainSmoothTimeInFrames will be used. If both are set to 0, a default value will be used. */
+    ma_log* pLog;                                   /* When set to NULL, will use the context's log. */
+    ma_uint32 listenerCount;                        /* Must be between 1 and MA_ENGINE_MAX_LISTENERS. */
+    ma_uint32 channels;                             /* The number of channels to use when mixing and spatializing. When set to 0, will use the native channel count of the device. */
+    ma_uint32 sampleRate;                           /* The sample rate. When set to 0 will use the native channel count of the device. */
+    ma_uint32 periodSizeInFrames;                   /* If set to something other than 0, updates will always be exactly this size. The underlying device may be a different size, but from the perspective of the mixer that won't matter.*/
+    ma_uint32 periodSizeInMilliseconds;             /* Used if periodSizeInFrames is unset. */
+    ma_uint32 gainSmoothTimeInFrames;               /* The number of frames to interpolate the gain of spatialized sounds across. If set to 0, will use gainSmoothTimeInMilliseconds. */
+    ma_uint32 gainSmoothTimeInMilliseconds;         /* When set to 0, gainSmoothTimeInFrames will be used. If both are set to 0, a default value will be used. */
+    ma_uint32 defaultVolumeSmoothTimeInPCMFrames;   /* Defaults to 0. Controls the default amount of smoothing to apply to volume changes to sounds. High values means more smoothing at the expense of high latency (will take longer to reach the new volume). */
     ma_allocation_callbacks allocationCallbacks;
-    ma_bool32 noAutoStart;                      /* When set to true, requires an explicit call to ma_engine_start(). This is false by default, meaning the engine will be started automatically in ma_engine_init(). */
-    ma_bool32 noDevice;                         /* When set to true, don't create a default device. ma_engine_read_pcm_frames() can be called manually to read data. */
-    ma_mono_expansion_mode monoExpansionMode;   /* Controls how the mono channel should be expanded to other channels when spatialization is disabled on a sound. */
-    ma_vfs* pResourceManagerVFS;                /* A pointer to a pre-allocated VFS object to use with the resource manager. This is ignored if pResourceManager is not NULL. */
+    ma_bool32 noAutoStart;                          /* When set to true, requires an explicit call to ma_engine_start(). This is false by default, meaning the engine will be started automatically in ma_engine_init(). */
+    ma_bool32 noDevice;                             /* When set to true, don't create a default device. ma_engine_read_pcm_frames() can be called manually to read data. */
+    ma_mono_expansion_mode monoExpansionMode;       /* Controls how the mono channel should be expanded to other channels when spatialization is disabled on a sound. */
+    ma_vfs* pResourceManagerVFS;                    /* A pointer to a pre-allocated VFS object to use with the resource manager. This is ignored if pResourceManager is not NULL. */
+    ma_engine_process_proc onProcess;               /* Fired at the end of each call to ma_engine_read_pcm_frames(). For engine's that manage their own internal device (the default configuration), this will be fired from the audio thread, and you do not need to call ma_engine_read_pcm_frames() manually in order to trigger this. */
+    void* pProcessUserData;                         /* User data that's passed into onProcess. */
 } ma_engine_config;
 
 MA_API ma_engine_config ma_engine_config_init(void);
@@ -7186,7 +7521,10 @@ struct ma_engine
     ma_sound_inlined* pInlinedSoundHead;        /* The first inlined sound. Inlined sounds are tracked in a linked list. */
     MA_ATOMIC(4, ma_uint32) inlinedSoundCount;  /* The total number of allocated inlined sound objects. Used for debugging. */
     ma_uint32 gainSmoothTimeInFrames;           /* The number of frames to interpolate the gain of spatialized sounds across. */
+    ma_uint32 defaultVolumeSmoothTimeInPCMFrames;
     ma_mono_expansion_mode monoExpansionMode;
+    ma_engine_process_proc onProcess;
+    void* pProcessUserData;
 };
 
 MA_API ma_result ma_engine_init(const ma_engine_config* pConfig, ma_engine* pEngine);
@@ -7199,15 +7537,21 @@ MA_API ma_resource_manager* ma_engine_get_resource_manager(ma_engine* pEngine);
 MA_API ma_device* ma_engine_get_device(ma_engine* pEngine);
 MA_API ma_log* ma_engine_get_log(ma_engine* pEngine);
 MA_API ma_node* ma_engine_get_endpoint(ma_engine* pEngine);
-MA_API ma_uint64 ma_engine_get_time(const ma_engine* pEngine);
-MA_API ma_result ma_engine_set_time(ma_engine* pEngine, ma_uint64 globalTime);
+MA_API ma_uint64 ma_engine_get_time_in_pcm_frames(const ma_engine* pEngine);
+MA_API ma_uint64 ma_engine_get_time_in_milliseconds(const ma_engine* pEngine);
+MA_API ma_result ma_engine_set_time_in_pcm_frames(ma_engine* pEngine, ma_uint64 globalTime);
+MA_API ma_result ma_engine_set_time_in_milliseconds(ma_engine* pEngine, ma_uint64 globalTime);
+MA_API ma_uint64 ma_engine_get_time(const ma_engine* pEngine);                  /* Deprecated. Use ma_engine_get_time_in_pcm_frames(). Will be removed in version 0.12. */
+MA_API ma_result ma_engine_set_time(ma_engine* pEngine, ma_uint64 globalTime);  /* Deprecated. Use ma_engine_set_time_in_pcm_frames(). Will be removed in version 0.12. */
 MA_API ma_uint32 ma_engine_get_channels(const ma_engine* pEngine);
 MA_API ma_uint32 ma_engine_get_sample_rate(const ma_engine* pEngine);
 
 MA_API ma_result ma_engine_start(ma_engine* pEngine);
 MA_API ma_result ma_engine_stop(ma_engine* pEngine);
 MA_API ma_result ma_engine_set_volume(ma_engine* pEngine, float volume);
+MA_API float ma_engine_get_volume(ma_engine* pEngine);
 MA_API ma_result ma_engine_set_gain_db(ma_engine* pEngine, float gainDB);
+MA_API float ma_engine_get_gain_db(ma_engine* pEngine);
 
 MA_API ma_uint32 ma_engine_get_listener_count(const ma_engine* pEngine);
 MA_API ma_uint32 ma_engine_find_closest_listener(const ma_engine* pEngine, float absolutePosX, float absolutePosY, float absolutePosZ);
@@ -7225,6 +7569,7 @@ MA_API void ma_engine_listener_set_enabled(ma_engine* pEngine, ma_uint32 listene
 MA_API ma_bool32 ma_engine_listener_is_enabled(const ma_engine* pEngine, ma_uint32 listenerIndex);
 
 #ifndef MA_NO_RESOURCE_MANAGER
+MA_API ma_result ma_engine_play_sound_ex(ma_engine* pEngine, const char* pFilePath, ma_node* pNode, ma_uint32 nodeInputBusIndex);
 MA_API ma_result ma_engine_play_sound(ma_engine* pEngine, const char* pFilePath, ma_sound_group* pGroup);   /* Fire and forget. */
 #endif
 
@@ -7240,6 +7585,8 @@ MA_API ma_engine* ma_sound_get_engine(const ma_sound* pSound);
 MA_API ma_data_source* ma_sound_get_data_source(const ma_sound* pSound);
 MA_API ma_result ma_sound_start(ma_sound* pSound);
 MA_API ma_result ma_sound_stop(ma_sound* pSound);
+MA_API ma_result ma_sound_stop_with_fade_in_pcm_frames(ma_sound* pSound, ma_uint64 fadeLengthInFrames);     /* Will overwrite any scheduled stop and fade. */
+MA_API ma_result ma_sound_stop_with_fade_in_milliseconds(ma_sound* pSound, ma_uint64 fadeLengthInFrames);   /* Will overwrite any scheduled stop and fade. */
 MA_API void ma_sound_set_volume(ma_sound* pSound, float volume);
 MA_API float ma_sound_get_volume(const ma_sound* pSound);
 MA_API void ma_sound_set_pan(ma_sound* pSound, float pan);
@@ -7282,13 +7629,18 @@ MA_API void ma_sound_set_directional_attenuation_factor(ma_sound* pSound, float 
 MA_API float ma_sound_get_directional_attenuation_factor(const ma_sound* pSound);
 MA_API void ma_sound_set_fade_in_pcm_frames(ma_sound* pSound, float volumeBeg, float volumeEnd, ma_uint64 fadeLengthInFrames);
 MA_API void ma_sound_set_fade_in_milliseconds(ma_sound* pSound, float volumeBeg, float volumeEnd, ma_uint64 fadeLengthInMilliseconds);
-MA_API float ma_sound_get_current_fade_volume(ma_sound* pSound);
+MA_API void ma_sound_set_fade_start_in_pcm_frames(ma_sound* pSound, float volumeBeg, float volumeEnd, ma_uint64 fadeLengthInFrames, ma_uint64 absoluteGlobalTimeInFrames);
+MA_API void ma_sound_set_fade_start_in_milliseconds(ma_sound* pSound, float volumeBeg, float volumeEnd, ma_uint64 fadeLengthInMilliseconds, ma_uint64 absoluteGlobalTimeInMilliseconds);
+MA_API float ma_sound_get_current_fade_volume(const ma_sound* pSound);
 MA_API void ma_sound_set_start_time_in_pcm_frames(ma_sound* pSound, ma_uint64 absoluteGlobalTimeInFrames);
 MA_API void ma_sound_set_start_time_in_milliseconds(ma_sound* pSound, ma_uint64 absoluteGlobalTimeInMilliseconds);
 MA_API void ma_sound_set_stop_time_in_pcm_frames(ma_sound* pSound, ma_uint64 absoluteGlobalTimeInFrames);
 MA_API void ma_sound_set_stop_time_in_milliseconds(ma_sound* pSound, ma_uint64 absoluteGlobalTimeInMilliseconds);
+MA_API void ma_sound_set_stop_time_with_fade_in_pcm_frames(ma_sound* pSound, ma_uint64 stopAbsoluteGlobalTimeInFrames, ma_uint64 fadeLengthInFrames);
+MA_API void ma_sound_set_stop_time_with_fade_in_milliseconds(ma_sound* pSound, ma_uint64 stopAbsoluteGlobalTimeInMilliseconds, ma_uint64 fadeLengthInMilliseconds);
 MA_API ma_bool32 ma_sound_is_playing(const ma_sound* pSound);
 MA_API ma_uint64 ma_sound_get_time_in_pcm_frames(const ma_sound* pSound);
+MA_API ma_uint64 ma_sound_get_time_in_milliseconds(const ma_sound* pSound);
 MA_API void ma_sound_set_looping(ma_sound* pSound, ma_bool32 isLooping);
 MA_API ma_bool32 ma_sound_is_looping(const ma_sound* pSound);
 MA_API ma_bool32 ma_sound_at_end(const ma_sound* pSound);
@@ -7296,6 +7648,9 @@ MA_API ma_result ma_sound_seek_to_pcm_frame(ma_sound* pSound, ma_uint64 frameInd
 MA_API ma_result ma_sound_get_data_format(ma_sound* pSound, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
 MA_API ma_result ma_sound_get_cursor_in_pcm_frames(ma_sound* pSound, ma_uint64* pCursor);
 MA_API ma_result ma_sound_get_length_in_pcm_frames(ma_sound* pSound, ma_uint64* pLength);
+MA_API ma_result ma_sound_get_cursor_in_seconds(ma_sound* pSound, float* pCursor);
+MA_API ma_result ma_sound_get_length_in_seconds(ma_sound* pSound, float* pLength);
+MA_API ma_result ma_sound_set_end_callback(ma_sound* pSound, ma_sound_end_proc callback, void* pUserData);
 
 MA_API ma_result ma_sound_group_init(ma_engine* pEngine, ma_uint32 flags, ma_sound_group* pParentGroup, ma_sound_group* pGroup);
 MA_API ma_result ma_sound_group_init_ex(ma_engine* pEngine, const ma_sound_group_config* pConfig, ma_sound_group* pGroup);
@@ -7353,6 +7708,7 @@ MA_API void ma_sound_group_set_stop_time_in_milliseconds(ma_sound_group* pGroup,
 MA_API ma_bool32 ma_sound_group_is_playing(const ma_sound_group* pGroup);
 MA_API ma_uint64 ma_sound_group_get_time_in_pcm_frames(const ma_sound_group* pGroup);
 #endif  /* MA_NO_ENGINE */
+/* END SECTION: miniaudio_engine.h */
 
 #ifdef __cplusplus
 }
@@ -7391,7 +7747,7 @@ For more information, please refer to <http://unlicense.org/>
 ===============================================================================
 ALTERNATIVE 2 - MIT No Attribution
 ===============================================================================
-Copyright 2020 David Reid
+Copyright 2023 David Reid
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
