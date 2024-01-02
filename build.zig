@@ -1,5 +1,11 @@
 const std = @import("std");
 
+const targets: []const std.zig.CrossTarget = &.{
+    .{ .cpu_arch = .aarch64, .os_tag = .macos },
+    //target=aarch64-linux-gnu.2.31 (RPI)
+    .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu, .glibc_version = 2.31 },
+};
+
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -7,26 +13,10 @@ pub fn build(b: *std.build.Builder) void {
     // for restricting supported target set are available.
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    //0.10
-    //const target = b.standardTargetOptions(.{});
-    //const mode = b.standardReleaseOptions();
 
     //0.11
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
-
-    //const miniaudio = b.addStaticLibrary("miniaudio", null);
-    //miniaudio.setTarget(target);
-    //miniaudio.setBuildMode(mode);
-    //miniaudio.linkLibC();
-    //miniaudio.force_pic = true;
-    //miniaudio.addCSourceFiles(&.{
-    //    "miniaudio/miniaudio.c",
-    //}, &.{
-    //    "-Wall"
-    //});
-
-    //0.11.0
     const exe = b.addExecutable(.{
         .name = "unbeatable",
         .root_source_file = .{ .path = "src/main.zig" },
@@ -35,9 +25,22 @@ pub fn build(b: *std.build.Builder) void {
     });
     const default_build = [_][]const u8{"-std=c99"};
     exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
-    exe.addIncludePath(.{ .path = "/opt/homebrew/include" });
-    exe.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
-    exe.linkSystemLibrary("raylib");
+    switch (exe.target.toTarget().os.tag) {
+        .macos => {
+            exe.addIncludePath(.{ .path = "/opt/homebrew/include" });
+            exe.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
+            exe.linkSystemLibrary("raylib");
+        },
+        .linux => {
+            exe.addIncludePath(.{ .path = "lib/linux/include"});
+            exe.addLibraryPath(.{ .path = "lib/linux/lib"});
+            exe.linkSystemLibraryName("raylib");
+        },
+        else => {
+            @panic("Unsupported OS");
+        },
+    }
+
     exe.addIncludePath(.{ .path = "miniaudio/split" });
     exe.addCSourceFile(.{ .file = .{ .path = "miniaudio/split/miniaudio.c" }, .flags = &default_build });
     exe.addIncludePath(.{ .path = "raylibwrapper" });
@@ -46,29 +49,6 @@ pub fn build(b: *std.build.Builder) void {
     exe.linkLibC();
     b.installArtifact(exe);
 
-    //0.10.0
-    //const exe = b.addExecutable("unbeatable-zig", "src/main.zig");
-    //exe.use_stage1 = true;
-    //exe.setTarget(target);
-    //exe.setBuildMode(mode);
-
-    //exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
-    //exe.addIncludePath("/opt/homebrew/include");
-    //exe.addLibraryPath("/opt/homebrew/lib");
-
-    ////exe.addIncludePath("/raylib-4.2.0/src");
-    ////exe.addLibraryPath("/raylib-4.2.0/src/zig-out/lib");
-
-    ////exe.linkSystemLibrary("soundio");
-    ////exe.linkSystemLibrary("sndfile");
-    //exe.linkSystemLibrary("raylib");
-    //exe.addIncludePath("miniaudio/split");
-    //exe.addCSourceFile("miniaudio/split/miniaudio.c", &[_][]const u8{});
-    //exe.addIncludePath("raylibwrapper");
-    //exe.addCSourceFile("raylibwrapper/raylibwrapper.c", &[_][]const u8{});
-    //exe.addIncludePath("multifx");
-    //exe.linkLibC();
-    //exe.install();
     ////const run_cmd = exe.run();
     ////run_cmd.step.dependOn(b.getInstallStep());
     ////if (b.args) |args| {

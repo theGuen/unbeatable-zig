@@ -293,13 +293,18 @@ pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !void {
     defer alloc.free(body_content);
     defer rfile.close();
 
-    var tokenStream = std.json.TokenStream.init(body_content);
-    //TODO: error: evaluation exceeded 1000 backwards branches...use @setEvalBranchQuota(BIG_NUMBER) before the call to parse to remove this error.
-    @setEvalBranchQuota(100000);
-    var newOne = try std.json.parse(SamplerL, &tokenStream, .{ .allocator = alloc });
-    defer std.json.parseFree(SamplerL, newOne, .{ .allocator = alloc });
+    //var tokenStream = std.json.TokenStream.init(body_content);
+    ////TODO: error: evaluation exceeded 1000 backwards branches...use @setEvalBranchQuota(BIG_NUMBER) before the call to parse to remove this error.
+    //@setEvalBranchQuota(100000);
+    //var newOne = try std.json.parse(SamplerL, &tokenStream, .{ .allocator = alloc });
+    //defer std.json.parseFree(SamplerL, newOne, .{ .allocator = alloc });
 
-    for (samplers.sounds,0..) |*snd, i| {
+    const parsed = try std.json.parseFromSlice(SamplerL, alloc, body_content, .{});
+    defer parsed.deinit();
+    const newOne = parsed.value;
+
+
+    for (&samplers.sounds,0..) |*snd, i| {
         const newSound = newOne.sounds[i];
 
         var str = try alloc.alloc(u8, newSound.name.len + 1);

@@ -113,3 +113,5 @@ Added a little filemenu
 
 Started building a case for a raspberry pi3 and some arcade buttons 
 If you are intrested have a look in the hardware folder)
+
+zig build -Dtarget=aarch64-linux-gnu.2.31

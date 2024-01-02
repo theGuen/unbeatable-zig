@@ -7,8 +7,6 @@ pub const closeBoxFun = *const fn (?*anyopaque) callconv(.C) void;
 pub const addNumEntryFun = *const fn (?*anyopaque, [*c]const u8, [*c]f32, f32, f32, f32, f32) callconv(.C) void;
 
 fn openHorizontalBoxImpl(ui: ?*anyopaque, label: [*c]const u8) callconv(.C) void {
-
-    //var gh = @ptrCast(*GroupHolder, @alignCast(@alignOf(GroupHolder), ui));
     var gh:*GroupHolder = @ptrCast(@alignCast(ui));
     if (gh.label[0] == 0) {
         gh.label = label;

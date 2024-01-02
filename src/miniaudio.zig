@@ -28,7 +28,6 @@ pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocat
 }
 
 pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
-    //var buffer = @as([*c]f32,@ptrCast( @alignCast(@alignOf([]f32), myBuffer)));
     var buffer = @as([*c]f32,@ptrCast( @alignCast( myBuffer)));
     var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
     var encoder = std.mem.zeroes(ma.ma_encoder);
@@ -38,6 +37,7 @@ pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
         std.debug.print("Could not init encoder {s}: {d}\n", .{ inFileName, r });
         return error.Unknown;
     }
+    //var pFramesWritten: c_ulonglong = 0;
     var pFramesWritten: usize = 0;
     r = ma.ma_encoder_write_pcm_frames(&encoder, buffer, myBuffer.len / 2, &pFramesWritten);
 }
@@ -53,7 +53,6 @@ pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !voi
     }
     var pFramesWritten: usize = 0;
     for (list.items) |buf| {
-        //var buffer = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), buf));
         var buffer = @as([*c]f32,@ptrCast( @alignCast(buf)));
         _ = ma.ma_encoder_write_pcm_frames(&encoder, buffer, buf.len / 2, &pFramesWritten);
         allocator.free(buf);
@@ -92,15 +91,12 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
 pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
     _ = input;
     _ = mydevice;
-    //var outw = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), out));
     var outw = @as([*c]f32,@ptrCast( @alignCast(out)));
 
     //Should we reuse the samebuffer?
     var mixBuffer = allocator.alloc([*c]f32, 2) catch return {};
     var l = allocator.alloc(f32, frame_count) catch return {};
     var r = allocator.alloc(f32, frame_count) catch return {};
-    //mixBuffer[0] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), l));
-    //mixBuffer[1] = @ptrCast([*c]f32, @alignCast(@alignOf([]f32), r));
     mixBuffer[0] = @as([*c]f32,@ptrCast(@alignCast(l)));
     mixBuffer[1] = @as([*c]f32,@ptrCast(@alignCast(r)));
 
@@ -121,7 +117,6 @@ pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const
 
     //apply faust dsp
     var cc2: c_int = @intCast(frame_count);
-    //var outm = @ptrCast([*c][*c]f32, @alignCast(@alignOf([][]f32), mixBuffer));
     var outm:[*c][*c]f32 = @ptrCast(@alignCast(mixBuffer));
     mfx.computemydsp(fx, cc2, outm, outm);
 

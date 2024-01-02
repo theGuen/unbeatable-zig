@@ -3,7 +3,6 @@ const assert = std.debug.assert;
 
 const ray = @cImport(@cInclude("raylibwrapper.h"));
 const sndFile = @import("sndFile.zig");
-//const sndio = @import("sndio.zig");
 const ma = @import("miniaudio.zig");
 const mah = @cImport(@cInclude("miniaudio.h"));
 
@@ -11,6 +10,7 @@ const mn = @import("menu.zig");
 const h = @import("helper.zig");
 const smplr = @import("sampler.zig");
 const rcdr = @import("recorder.zig");
+const ui = @import("ui.zig");
 
 var sampler: smplr.Sampler = undefined;
 
@@ -25,7 +25,6 @@ fn mix() [2]f32 {
     return sample;
 }
 
-var music: ray.Music = undefined;
 
 // TODO:This loop takes 33M in memory???
 fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
@@ -41,8 +40,6 @@ fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
 
     var buttons: [16]ray.Rectangle = undefined;
     for (&buttons,0..) |*b,i| {
-        //const ix = @intToFloat(f32, 10 + (i % 4) * 10 + (i % 4) * 100);
-        //const iy = @intToFloat(f32, 110 + (i / 4) * 10 + (i / 4) * 100);
         const ix = @as(f32, @floatFromInt( 10 + (i % 4) * 10 + (i % 4) * 100));
         const iy = @as(f32,@floatFromInt( 110 + (i / 4) * 10 + (i / 4) * 100));
         b.* = ray.Rectangle{ .x = ix, .y = iy, .width = 100, .height = 100 };
@@ -56,12 +53,12 @@ fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
 
     var currentPad: usize = 0;
 
-    ray.InitAudioDevice();
-    music = ray.LoadMusicStream("project/snd_0.wav");
-    ray.PlayMusicStream(music);
-    //ray.AttachAudioStreamProcessor(music.stream, callback);
+    //ray.InitAudioDevice();
+    //var music = ray.LoadMusicStream("project/snd_0.wav");
+    //ray.PlayMusicStream(music);
+
     while (!ray.WindowShouldClose()) {
-        ray.UpdateMusicStream(music);
+        //ray.UpdateMusicStream(music);
         currentPad = sampler.selectedSound;
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC Sample Display
@@ -75,15 +72,11 @@ fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
             const scale = smplCount / 430;
             const realPos = sampler.sounds[currentPad].posf;
 
-            //const realStart = @floatToInt(usize, sampler.sounds[currentPad].start);
             const realStart = @as(usize,@intFromFloat(sampler.sounds[currentPad].start));
-            //const realEnd = @floatToInt(usize, sampler.sounds[currentPad].end);
             const realEnd = @as(usize,@intFromFloat(sampler.sounds[currentPad].end));
-            //const tmp = @floatToInt(usize, realPos / @intToFloat(f64, maxDispSamples));
             const tmp = @as(usize,@intFromFloat( realPos / @as(f64,@floatFromInt(maxDispSamples))));
 
             const offset = tmp * maxDispSamples;
-            //cm = (realPos - @intToFloat(f64, offset)) / @intToFloat(f64, scale);
             cm = (realPos - @as(f64,@floatFromInt(offset))) / @as(f64,@floatFromInt(scale));
             if (realStart > offset and realStart < offset + maxDispSamples) {
                 sm = (realStart - offset) / scale;
@@ -129,7 +122,6 @@ fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
         // CALC MENU Display
         var padStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}", .{currentPad}) catch "";
         defer std.heap.page_allocator.free(padStr);
-        //const padString = @ptrCast([*c]u8, padStr);
         const padString =@as([*c]u8, @constCast(@ptrCast(padStr)));
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC MENU INPUT
@@ -175,17 +167,14 @@ fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu) !void {
 
         for (smplDisp,0..) |y, x| {
             if (x < sm or x > em) {
-                //ray.DrawLine(@intCast(c_int, x + 10), 29 + y, @intCast(c_int, x + 10), 29 - y, ray.DARKGRAY);
                 ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.DARKGRAY);
             } else {
-                //ray.DrawLine(@intCast(c_int, x + 10), 29 + y, @intCast(c_int, x + 10), 29 - y, ray.BLACK);
                 ray.DrawLine(@intCast( x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.BLACK);
             }
         }
 
         var sm_c = @as(c_int,@intCast(sm));
         var em_c = @as(c_int,@intCast(em));
-        //var ph = @floatToInt(c_int, cm);
         var ph = @as(c_int,@intFromFloat(cm));
         ray.DrawLine(10 + ph, 4, 10 + ph, 54, ray.RED);
         ray.DrawLine(10 + sm_c, 4, 10 + sm_c, 54, ray.ORANGE);
@@ -221,7 +210,7 @@ pub fn main() !void {
 
     sampler = smplr.initSampler(alloc);
     defer sampler.deinit();
-    //try smplr.loadSamplerConfig(alloc, &sampler);
+    try smplr.loadSamplerConfig(alloc, &sampler);
     var recorder = rcdr.newRecorder(alloc);
 
     try h.loadCmdLineArgSamples(alloc, &sampler);
@@ -229,7 +218,9 @@ pub fn main() !void {
     defer arena.deinit();
     const arenaAlloc = arena.allocator();
     var fxMenuItems = try ma.init(alloc, arenaAlloc,mix, &recorder);
+    
     var menu: mn.Menu = try mn.initMenu(alloc, arenaAlloc, &sampler, &recorder, fxMenuItems);
+    defer menu.deinit();
     //_ = async asyncMain();
     //_ = try ma.startAudio();
     
@@ -240,7 +231,13 @@ pub fn main() !void {
     var pCaptureInfos :?*mah.ma_device_info = undefined;
     var captureCount : mah.ma_uint32 =0;
 
-    if (mah.ma_context_init(null, 0, &ctxConfig, &context) != mah.MA_SUCCESS) {
+    var backends = [3]mah.ma_backend{
+        mah.ma_backend_coreaudio,
+        mah.ma_backend_alsa,
+        mah.ma_backend_pulseaudio,
+    };
+    const cba =@as([*c]c_uint, @constCast(&backends));
+    if (mah.ma_context_init(cba, 3, &ctxConfig, &context) != mah.MA_SUCCESS) {
         std.debug.print("ma_context_init failed",.{});
     }
     if (mah.ma_context_get_devices(&context, &pPlaybackInfos, &playbackCount, &pCaptureInfos, &captureCount) != mah.MA_SUCCESS) {
@@ -277,7 +274,8 @@ pub fn main() !void {
     
     //
     //loop forever
-    _ = try drawWindow(&sampler, &menu);
+    //_ = try drawWindow(&sampler, &menu);
+    _ = try ui.drawWindow(&sampler, &menu);
 
     try smplr.saveSamplerConfig(alloc, &sampler);
 

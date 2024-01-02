@@ -12,6 +12,7 @@ pub const State = struct {
 };
 fn newState() State {
     var stateStr = std.fmt.allocPrint(std.heap.page_allocator, "not implemented ", .{}) catch "";
+    //TODO: 0 termination in 0.11
     //stateStr[stateStr.len - 1] = 0;
     return State{
         .stateValInt = 0,
@@ -75,6 +76,18 @@ pub const Menu = struct {
             return item.current();
         }
         return item.label();
+    }
+    pub fn deinit(self: *Menu) void {
+        std.debug.print("Deinit Menu\n", .{});
+        for (self.menuItems) |m| {
+            std.debug.print("Deinit MenuItem {?}", .{@TypeOf(m)});
+          if(@TypeOf(m) == FileMenuItem){
+            std.debug.print("Deinit Filemenu\n", .{});
+            m.menuValues.deinit();
+          }else{
+            std.debug.print("...skip\n", .{});
+          }
+        }
     }
 };
 
@@ -325,7 +338,6 @@ pub const SamplerMenuItem = struct {
     valueStr: []u8,
     menuValues: []SamplerValue,
     pub fn iMenuItem(self: *SamplerMenuItem) ui.IMenuItem {
-        //.impl = @ptrCast(*anyopaque, self),
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
@@ -368,37 +380,37 @@ pub const SamplerMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*SamplerMenuItem, @alignCast(@alignOf(SamplerMenuItem), self_void));
+
         var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
@@ -481,7 +493,6 @@ pub const RecorderMenuItem = struct {
     valueStr: []u8,
     menuValues: []RecorderValue,
     pub fn iMenuItem(self: *RecorderMenuItem) ui.IMenuItem {
-        //.impl = @ptrCast(*anyopaque, self),
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
@@ -524,37 +535,37 @@ pub const RecorderMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-       // var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*RecorderMenuItem, @alignCast(@alignOf(RecorderMenuItem), self_void));
+
         var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
@@ -582,7 +593,6 @@ pub const FileMenuItem = struct {
     valueStr: []u8,
     menuValues: std.ArrayList(h.DirEntry),
     pub fn iMenuItem(self: *FileMenuItem) ui.IMenuItem {
-        //.impl = @ptrCast(*anyopaque, self),
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
@@ -646,37 +656,37 @@ pub const FileMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-        //var self = @ptrCast(*FileMenuItem, @alignCast(@alignOf(FileMenuItem), self_void));
+
         var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
