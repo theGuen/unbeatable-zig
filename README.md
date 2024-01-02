@@ -4,9 +4,8 @@ Hopefully it will become a drum machine
 zig is version 0.11.0 (asdf)
 
 Dependencies installed with brew:
-* libsundio (not used right now)
 * libsndfile (not used right now)
-* raylib
+* raylib (aarch64-linux-gnu included for raspberry bullseye)
 
 miniaudio copy of the split version included in ./miniaudio
 * link: https://github.com/mackron/miniaudio
@@ -114,4 +113,8 @@ Added a little filemenu
 Started building a case for a raspberry pi3 and some arcade buttons 
 If you are intrested have a look in the hardware folder)
 
+Never finished this... got a gamepie43 instead... let's see
+
+zig is now 0.11
+raspberry build
 zig build -Dtarget=aarch64-linux-gnu.2.31
