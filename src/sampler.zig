@@ -1,7 +1,9 @@
 const std = @import("std");
 const math = @import("std").math;
 const ma = @import("miniaudio.zig");
+const settings = @import("settings.zig");
 
+var m = std.Thread.Mutex{};
 pub const Sampler = struct {
     alloc: std.mem.Allocator,
     selectedSound: usize,
@@ -18,7 +20,7 @@ pub const Sampler = struct {
         sound.end = @floatFromInt(sound.buffer[0].len - 1);
         sound.reversed = false;
         sound.mutegroup = self.selectedSound;
-        std.debug.print("Loaded: {d}\n", .{self.selectedSound});
+        //std.debug.print("Loaded: {d}\n", .{self.selectedSound});
         if (b.len > 0) {
             self.alloc.free(b[0]);
             self.alloc.free(b[1]);
@@ -42,10 +44,14 @@ pub const Sampler = struct {
             self.alloc.free(b);
         }
     }
-    pub fn play(self: *Sampler, soundIndex: usize) void {
-        self.selectedSound = soundIndex;
+    pub fn play(self: *Sampler, soundIndex: usize, select: bool) void {
+        m.lock();
+        defer m.unlock();
+        if (select) {
+            self.selectedSound = soundIndex;
+        }
         const mutegroup = self.sounds[soundIndex].mutegroup;
-        for (&self.sounds,0..) |*s, i| {
+        for (&self.sounds, 0..) |*s, i| {
             if (s.mutegroup == mutegroup and i != soundIndex) {
                 self.sounds[i].stop(true);
             }
@@ -143,7 +149,7 @@ pub const Sampler = struct {
 };
 pub fn initSampler(alloc: std.mem.Allocator) Sampler {
     var this = Sampler{ .alloc = alloc, .selectedSound = 0, .sounds = undefined };
-    for (&this.sounds) |*s| {
+    for (&this.sounds, 0..) |*s, i| {
         s.buffer = &[_][]f32{};
         s.posf = 0;
         s.gain = 1;
@@ -155,7 +161,7 @@ pub fn initSampler(alloc: std.mem.Allocator) Sampler {
         s.gated = false;
         s.pitch = 1;
         s.semis = 0;
-        s.mutegroup = 0;
+        s.mutegroup = i;
     }
     return this;
 }
@@ -187,7 +193,7 @@ const Sound = struct {
                 p.posf = ende - (start - p.posf);
                 if (!p.looping) p.playing = false;
             }
-            const pos:i64 = @intFromFloat(p.posf);
+            const pos: i64 = @intFromFloat(p.posf);
             if (!p.reversed) {
                 p.posf += p.pitch;
             } else {
@@ -270,10 +276,10 @@ fn pitchSemis(pitch: i64) f32 {
     oct += 1;
     var p: f32 = 0.0;
     if (pitch < 0) {
-        p = math.pow(f32, pitchstep, @as(f32,@floatFromInt((12 - semi))));
-        p = p * 1 / math.pow(f32, 2, @as(f32,@floatFromInt(oct)));
+        p = math.pow(f32, pitchstep, @as(f32, @floatFromInt((12 - semi))));
+        p = p * 1 / math.pow(f32, 2, @as(f32, @floatFromInt(oct)));
     } else if (pitch > 0 and pitch < 12) {
-        p = math.pow(f32, pitchstep, @as(f32,@floatFromInt(semi)));
+        p = math.pow(f32, pitchstep, @as(f32, @floatFromInt(semi)));
         p = p * @as(f32, @floatFromInt(oct));
     } else if (pitch == 12) {
         p = 2;
@@ -286,36 +292,30 @@ fn pitchSemis(pitch: i64) f32 {
 }
 
 pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !void {
-    std.fs.cwd().makeDir("project1") catch {};
-    const dir = std.fs.cwd().openIterableDir("project1", .{}) catch return {};
+    std.fs.cwd().makeDir(settings.defaultProj) catch {};
+    const dir = std.fs.cwd().openIterableDir(settings.defaultProj, .{}) catch return {};
     var rfile = dir.dir.openFile("sampler_config.json", .{}) catch return {};
     const body_content = try rfile.readToEndAlloc(alloc, std.math.maxInt(usize));
     defer alloc.free(body_content);
     defer rfile.close();
 
-    //var tokenStream = std.json.TokenStream.init(body_content);
-    ////TODO: error: evaluation exceeded 1000 backwards branches...use @setEvalBranchQuota(BIG_NUMBER) before the call to parse to remove this error.
-    //@setEvalBranchQuota(100000);
-    //var newOne = try std.json.parse(SamplerL, &tokenStream, .{ .allocator = alloc });
-    //defer std.json.parseFree(SamplerL, newOne, .{ .allocator = alloc });
-
     const parsed = try std.json.parseFromSlice(SamplerL, alloc, body_content, .{});
     defer parsed.deinit();
     const newOne = parsed.value;
 
-
-    for (&samplers.sounds,0..) |*snd, i| {
+    for (&samplers.sounds, 0..) |*snd, i| {
         const newSound = newOne.sounds[i];
-
-        var str = try alloc.alloc(u8, newSound.name.len + 1);
-        defer alloc.free(str);
-        str[newSound.name.len] = 0;
-        for (newSound.name,0..) |c, ii| str[ii] = c;
-        if (ma.loadAudioFile(alloc, str)) |b| {
-            const split = try splitSample(alloc, b, b.len);
-            samplers.load(split, i);
-        } else |err| {
-            std.debug.print("ERROR: {s}\n", .{@errorName(err)});
+        if (newSound.end != 0) {
+            var str = try alloc.alloc(u8, newSound.name.len + 1);
+            defer alloc.free(str);
+            str[newSound.name.len] = 0;
+            for (newSound.name, 0..) |c, ii| str[ii] = c;
+            if (ma.loadAudioFile(alloc, str)) |b| {
+                const split = try splitSample(alloc, b, b.len);
+                samplers.load(split, i);
+            } else |err| {
+                std.debug.print("ERROR: {s}\n", .{@errorName(err)});
+            }
         }
         snd.gain = newSound.gain;
         snd.start = newSound.start;
@@ -329,13 +329,12 @@ pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !void {
     }
 }
 
-
 pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
     var arena = std.heap.ArenaAllocator.init(alloc);
     defer arena.deinit();
 
     var sw: SamplerW = undefined;
-    for (&sw.sounds,0..) |*snd, i| {
+    for (&sw.sounds, 0..) |*snd, i| {
         const string = try std.fmt.allocPrint(arena.allocator(), "project1/snd_{d}.wav", .{i});
         snd.name = string;
         snd.gain = sampler.sounds[i].gain;
@@ -349,13 +348,13 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
         snd.mutegroup = sampler.sounds[i].mutegroup;
         var str = try arena.allocator().alloc(u8, string.len + 1);
         str[string.len] = 0;
-        for (string,0..) |c, ii| str[ii] = c;
+        for (string, 0..) |c, ii| str[ii] = c;
         var join = try joinSample(arena.allocator(), sampler.sounds[i].buffer);
         try ma.saveAudioFile(str, join);
     }
 
-    std.fs.cwd().makeDir("project1") catch {};
-    const dir = try std.fs.cwd().openIterableDir("project1", .{});
+    std.fs.cwd().makeDir(settings.defaultProj) catch {};
+    const dir = try std.fs.cwd().openIterableDir(settings.defaultProj, .{});
     var file = try dir.dir.createFile("sampler_config.json", .{});
     defer file.close();
     const fw = file.writer();
@@ -366,10 +365,10 @@ pub fn copySample(alloc: std.mem.Allocator, sample: [][]f32) ![][]f32 {
     var ret = try alloc.alloc([]f32, sample.len);
     var l = try alloc.alloc(f32, sample[0].len);
     var r = try alloc.alloc(f32, sample[1].len);
-    for (l,0..) |*s, i| {
+    for (l, 0..) |*s, i| {
         s.* = sample[0][i];
     }
-    for (r,0..) |*s, i| {
+    for (r, 0..) |*s, i| {
         s.* = sample[1][i];
     }
     ret[0] = l;
@@ -384,7 +383,7 @@ pub fn splitSample(alloc: std.mem.Allocator, sample: []f32, slen: usize) ![][]f3
     var l = try alloc.alloc(f32, splitLen);
     var r = try alloc.alloc(f32, splitLen);
     var ret = try alloc.alloc([]f32, 2);
-    for (l,0..) |_, i| {
+    for (l, 0..) |_, i| {
         if (i == splitLen) break;
         l[i] = sam[i * 2];
         r[i] = sam[i * 2 + 1];
@@ -397,7 +396,7 @@ pub fn splitSample(alloc: std.mem.Allocator, sample: []f32, slen: usize) ![][]f3
 pub fn joinSample(alloc: std.mem.Allocator, sample: [][]f32) ![]f32 {
     if (sample.len > 0) {
         var ret = try alloc.alloc(f32, sample[0].len * 2);
-        for (sample[0],0..) |_, i| {
+        for (sample[0], 0..) |_, i| {
             ret[i * 2] = sample[0][i];
             ret[i * 2 + 1] = sample[1][i];
         }

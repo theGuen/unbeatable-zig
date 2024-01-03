@@ -118,3 +118,5 @@ Never finished this... got a gamepie43 instead... let's see
 zig is now 0.11
 raspberry build
 zig build -Dtarget=aarch64-linux-gnu.2.31
+
+Started to add a sequencer.

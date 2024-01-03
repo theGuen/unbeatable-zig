@@ -81,12 +81,12 @@ pub const Menu = struct {
         std.debug.print("Deinit Menu\n", .{});
         for (self.menuItems) |m| {
             std.debug.print("Deinit MenuItem {?}", .{@TypeOf(m)});
-          if(@TypeOf(m) == FileMenuItem){
-            std.debug.print("Deinit Filemenu\n", .{});
-            m.menuValues.deinit();
-          }else{
-            std.debug.print("...skip\n", .{});
-          }
+            if (@TypeOf(m) == FileMenuItem) {
+                std.debug.print("Deinit Filemenu\n", .{});
+                m.menuValues.deinit();
+            } else {
+                std.debug.print("...skip\n", .{});
+            }
         }
     }
 };
@@ -211,7 +211,7 @@ fn currentpitch(self: *SamplerValue) [*c]const u8 {
 
 fn upstart(self: *SamplerValue) void {
     self.state.stateValInt = self.sampler.getSoundStart();
-    self.state.stateValInt = @min(self.state.stateValInt + 1000, @as(i64,@intCast(self.sampler.getSoundSize())));
+    self.state.stateValInt = @min(self.state.stateValInt + 1000, @as(i64, @intCast(self.sampler.getSoundSize())));
     _ = self.sampler.setSoundStart(self.state.stateValInt);
 }
 fn downstart(self: *SamplerValue) void {
@@ -228,7 +228,7 @@ fn currentstart(self: *SamplerValue) [*c]const u8 {
 
 fn upend(self: *SamplerValue) void {
     self.state.stateValInt = self.sampler.getSoundEnd();
-    self.state.stateValInt = @min(self.state.stateValInt + 1000, @as(i64,@intCast(self.sampler.getSoundSize())));
+    self.state.stateValInt = @min(self.state.stateValInt + 1000, @as(i64, @intCast(self.sampler.getSoundSize())));
     _ = self.sampler.setSoundEnd(self.state.stateValInt);
 }
 fn downend(self: *SamplerValue) void {
@@ -245,7 +245,7 @@ fn currentend(self: *SamplerValue) [*c]const u8 {
 
 fn upstartlazy(self: *SamplerValue) void {
     self.state.stateValInt = self.sampler.getSoundCurrentPos();
-    self.state.stateValInt = @min(self.state.stateValInt, @as(i64,@intCast(self.sampler.getSoundSize())));
+    self.state.stateValInt = @min(self.state.stateValInt, @as(i64, @intCast(self.sampler.getSoundSize())));
     _ = self.sampler.setSoundStart(self.state.stateValInt);
 }
 fn downstartlazy(self: *SamplerValue) void {
@@ -261,8 +261,8 @@ fn currentstartlazy(self: *SamplerValue) [*c]const u8 {
 
 fn upendlazy(self: *SamplerValue) void {
     self.state.stateValInt = self.sampler.getSoundCurrentPos();
-    
-    self.state.stateValInt = @min(self.state.stateValInt, @as(i64,@intCast(self.sampler.getSoundSize())));
+
+    self.state.stateValInt = @min(self.state.stateValInt, @as(i64, @intCast(self.sampler.getSoundSize())));
     _ = self.sampler.setSoundEnd(self.state.stateValInt);
 }
 fn downendlazy(self: *SamplerValue) void {
@@ -279,8 +279,8 @@ fn currentendlazy(self: *SamplerValue) [*c]const u8 {
 fn upmovelazy(self: *SamplerValue) void {
     const s = self.sampler.getSoundStart();
     const e = self.sampler.getSoundEnd();
-    const newS = @min(e, @as(i64,@intCast(self.sampler.getSoundSize())));
-    const newE = @min(e + (e - s), @as(i64,@intCast(self.sampler.getSoundSize())));
+    const newS = @min(e, @as(i64, @intCast(self.sampler.getSoundSize())));
+    const newE = @min(e + (e - s), @as(i64, @intCast(self.sampler.getSoundSize())));
     _ = self.sampler.setSoundStart(newS);
     _ = self.sampler.setSoundEnd(newE);
     self.state.stateValInt += 1;
@@ -302,7 +302,7 @@ fn currentmovelazy(self: *SamplerValue) [*c]const u8 {
 
 fn upcopy(self: *SamplerValue) void {
     if (self.state.stateValInt > -1) {
-        const src:usize = @intCast(self.state.stateValInt);
+        const src: usize = @intCast(self.state.stateValInt);
         _ = self.sampler.copySound(src, self.sampler.selectedSound);
         self.state.stateValInt = -1;
     } else {
@@ -320,7 +320,7 @@ fn currentcopy(self: *SamplerValue) [*c]const u8 {
     } else {
         self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d}", .{ self.label, self.sampler.selectedSound }) catch "";
     }
-    return @ptrCast( self.state.stateValStr);
+    return @ptrCast(self.state.stateValStr);
 }
 
 const SamplerValue = struct {
@@ -380,38 +380,31 @@ pub const SamplerMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*SamplerMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
 };
@@ -457,7 +450,7 @@ fn downrecord(self: *RecorderValue) void {
         const split = smplr.splitSample(self.recorder.alloc, recorded, recorded.len) catch return {};
         self.sampler.load(split, @intCast(self.state.stateValInt));
         self.loaded = false;
-        self.sampler.play(@intCast(self.state.stateValInt));
+        self.sampler.play(@intCast(self.state.stateValInt), true);
     } else {
         self.loaded = false;
     }
@@ -535,38 +528,31 @@ pub const RecorderMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-
-       var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*RecorderMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
 };
@@ -656,38 +642,31 @@ pub const FileMenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-
-        var self:*FileMenuItem = @ptrCast(@alignCast(self_void));
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
 };
@@ -706,12 +685,12 @@ fn buildFIleMenu(arena: std.mem.Allocator, alloc: std.mem.Allocator, sampler: *s
 pub fn initMenu(notArena: std.mem.Allocator, alloc: std.mem.Allocator, sampler: *smplr.Sampler, recorder: *rcdr.Recorder, otherMenuItems: []ui.MenuItem) !Menu {
     var samplerMenu = try buildSamplerMenu(alloc, sampler);
     var recorderMenu = try buildRecorderMenu(alloc, recorder, sampler);
-    var fileMenu = try buildFIleMenu(alloc, notArena,sampler);
+    var fileMenu = try buildFIleMenu(alloc, notArena, sampler);
     var iMenuItems: []ui.IMenuItem = try alloc.alloc(ui.IMenuItem, otherMenuItems.len + 3);
     iMenuItems[0] = samplerMenu[0].iMenuItem();
     iMenuItems[1] = recorderMenu[0].iMenuItem();
     iMenuItems[2] = fileMenu[0].iMenuItem();
-    for (otherMenuItems,0..) |*omi, i| iMenuItems[i + 3] = omi.iMenuItem();
+    for (otherMenuItems, 0..) |*omi, i| iMenuItems[i + 3] = omi.iMenuItem();
     var menu: Menu = undefined;
     menu.alloc = alloc;
     menu._currentIndex = 0;

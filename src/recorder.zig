@@ -17,7 +17,7 @@ pub const Recorder = struct {
         var pos: usize = 0;
         var rb = self.alloc.alloc(f32, length) catch return &[_]f32{};
         for (self.recordList.items) |buf| {
-            for (buf,0..) |_, i| rb[i + pos] = buf[i];
+            for (buf, 0..) |_, i| rb[i + pos] = buf[i];
             pos += buf.len;
             self.alloc.free(buf);
         }

@@ -30,10 +30,13 @@ pub fn build(b: *std.build.Builder) void {
             exe.addIncludePath(.{ .path = "/opt/homebrew/include" });
             exe.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
             exe.linkSystemLibrary("raylib");
+            //exe.addIncludePath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/include" });
+            //exe.addLibraryPath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/lib" });
+            //exe.linkSystemLibraryName("raylib");
         },
         .linux => {
-            exe.addIncludePath(.{ .path = "lib/linux/include"});
-            exe.addLibraryPath(.{ .path = "lib/linux/lib"});
+            exe.addIncludePath(.{ .path = "lib/linux/include" });
+            exe.addLibraryPath(.{ .path = "lib/linux/lib" });
             exe.linkSystemLibraryName("raylib");
         },
         else => {
@@ -41,6 +44,8 @@ pub fn build(b: *std.build.Builder) void {
         },
     }
 
+    exe.addIncludePath(.{ .path = "timer" });
+    exe.addCSourceFile(.{ .file = .{ .path = "timer/timer.c" }, .flags = &default_build });
     exe.addIncludePath(.{ .path = "miniaudio/split" });
     exe.addCSourceFile(.{ .file = .{ .path = "miniaudio/split/miniaudio.c" }, .flags = &default_build });
     exe.addIncludePath(.{ .path = "raylibwrapper" });
