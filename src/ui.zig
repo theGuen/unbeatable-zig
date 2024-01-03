@@ -2,14 +2,8 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const ray = @cImport(@cInclude("raylibwrapper.h"));
-const sndFile = @import("sndFile.zig");
-const ma = @import("miniaudio.zig");
-const mah = @cImport(@cInclude("miniaudio.h"));
-
 const mn = @import("menu.zig");
-const h = @import("helper.zig");
 const smplr = @import("sampler.zig");
-const rcdr = @import("recorder.zig");
 const seq = @import("sequencer.zig");
 const settings = @import("settings.zig");
 
