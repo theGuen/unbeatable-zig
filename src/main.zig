@@ -69,18 +69,30 @@ pub fn main() !void {
     }
     std.debug.print("INFO: selected backend: {d}, {s}\n", .{ context.backend, mah.ma_get_backend_name(context.backend) });
     var deviceId: [*c]mah.ma_device_id = undefined;
+    var deviceIdDefault: [*c]mah.ma_device_id = undefined;
     for (0..playbackCount) |x| {
         std.debug.print("INFO:\t> available device: {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
     }
+    var found = false;
     for (0..playbackCount) |x| {
         if (context.backend == mah.ma_backend_coreaudio and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.coreaudioDefaultDevice)) {
             deviceId = &pPlaybackInfos[x].id;
+            found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
         }
         if (context.backend == mah.ma_backend_pulseaudio and x == settings.defaultDeviceIndex) {
             deviceId = &pPlaybackInfos[x].id;
+            found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
         }
+        if (pPlaybackInfos[x].isDefault == 1) {
+            deviceIdDefault = &pPlaybackInfos[x].id;
+            std.debug.print("INFO: default device : {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
+        }
+    }
+    if (!found) {
+        std.debug.print("INFO:\t> using default \n", .{});
+        deviceId = deviceIdDefault;
     }
 
     var device = std.mem.zeroes(mah.ma_device);
@@ -88,7 +100,7 @@ pub fn main() !void {
     deviceConfig.playback.pDeviceID = @constCast(deviceId);
     deviceConfig.playback.format = mah.ma_format_f32;
     deviceConfig.playback.channels = 2;
-    deviceConfig.sampleRate = 22050;
+    deviceConfig.sampleRate = 44100;
     deviceConfig.dataCallback = ma.audio_callback;
     deviceConfig.pUserData = null;
     var r = mah.ma_device_init(&context, &deviceConfig, &device);
@@ -111,7 +123,6 @@ pub fn main() !void {
     //
     //loop forever
     _ = try ui.drawWindow(&sampler, &menu, &seq.sequencer);
-
     try smplr.saveSamplerConfig(alloc, &sampler);
     try seq.saveSequence(&seq.sequencer);
 

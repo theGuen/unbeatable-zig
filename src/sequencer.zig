@@ -22,6 +22,7 @@ pub const Sequencer = struct {
     recording: bool,
     playing: bool,
     currentTick: i64,
+    micros: c_int,
     pub fn startRecording(self: *Sequencer) void {
         if (!self.recording) {
             self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
@@ -40,17 +41,18 @@ pub const Sequencer = struct {
     }
     pub fn stopRecording(self: *Sequencer) void {
         self.recording = false;
+
         // debug
-        //        var clone = self.recordList.clone() catch return;
-        //        var sl = clone.toOwnedSlice() catch return;
-        //        var js = std.json.stringifyAlloc(
-        //            self.alloc,
-        //            sl,
-        //            .{ .whitespace = .indent_2 },
-        //        ) catch return;
-        //        std.debug.print("Seq: {s}\n", .{js});
-        //        self.alloc.free(js);
-        //        self.alloc.free(sl);
+        var clone = self.recordList.clone() catch return;
+        var sl = clone.toOwnedSlice() catch return;
+        var js = std.json.stringifyAlloc(
+            self.alloc,
+            sl,
+            .{ .whitespace = .indent_2 },
+        ) catch return;
+        std.debug.print("Seq: {s}\n", .{js});
+        self.alloc.free(js);
+        self.alloc.free(sl);
     }
     pub fn clearRecording(self: *Sequencer) void {
         if (!self.recording) self.recordList.deinit();
@@ -82,9 +84,9 @@ pub fn newSequencer(
     sampler: *smplr.Sampler,
 ) Sequencer {
     var c: c_int = @divFloor(settings.minute, settings.bpm * settings.ppq);
-    var this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .playing = false, .recording = false, .sampler = sampler, .currentTick = -1 };
-    sequencer = this;
     tim.startTimer(c, tick_callback);
+    var this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c };
+    sequencer = this;
     return this;
 }
 

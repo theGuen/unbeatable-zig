@@ -13,8 +13,15 @@ void startTimer(int msec,void (*tcall)(int)){
    new_timer.it_value.tv_usec = 0;
    new_timer.it_interval.tv_sec = 0;
    new_timer.it_interval.tv_usec = msec;
+   
+   struct sigaction sa;
+   sa.sa_handler = tcall;
+   //sa.sa_mask = 0;
+   sa.sa_flags = 0;
+   sigaction(SIGALRM, &sa, NULL);
+   //signal(SIGALRM, tcall);
    setitimer(ITIMER_REAL, &new_timer, &old_timer);
-   signal(SIGALRM, tcall);
+   
 }
 void stopTimer(){
    struct itimerval new_timer;

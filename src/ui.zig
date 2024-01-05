@@ -4,6 +4,7 @@ const assert = std.debug.assert;
 const ray = @cImport(@cInclude("raylibwrapper.h"));
 const mn = @import("menu.zig");
 const smplr = @import("sampler.zig");
+const helper = @import("helper.zig");
 const seq = @import("sequencer.zig");
 const settings = @import("settings.zig");
 
@@ -122,22 +123,22 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         var but_a = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         var but_a_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        var but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        var but_b_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        var but_x = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-        var but_x_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        var but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        var but_b_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        var but_x = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+        var but_x_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
         var but_y = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
         var but_y_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
         var but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
         var but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
 
-        if (but_a) samplers.play(0, true);
+        if (but_a and !but_b) samplers.play(0, true);
         if (but_a_rel) samplers.stop(0);
-        if (but_b) samplers.play(1, true);
+        if (but_b and !but_a) samplers.play(1, true);
         if (but_b_rel) samplers.stop(1);
-        if (but_x) samplers.play(2, true);
+        if (but_x and !but_y) samplers.play(2, true);
         if (but_x_rel) samplers.stop(2);
-        if (but_y) samplers.play(3, true);
+        if (but_y and !but_x) samplers.play(3, true);
         if (but_y_rel) samplers.stop(3);
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
@@ -164,6 +165,23 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         down_prev = down;
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC PAD INPUT
+        if (but_a and but_b) {
+            std.debug.print("Seq prepared\n", .{});
+            seqRec = true;
+        }
+        if (but_x and but_y) {
+            _ = sequencer.stopRecording();
+        }
+        if (but_x and but_b) {
+            _ = sequencer.startPlaying();
+        }
+        if (but_a and but_y) {
+            _ = sequencer.stopPlaying();
+        }
+        if (seqRec and (but_a or but_b or but_x or but_y)) {
+            _ = sequencer.startRecording();
+            seqRec = false;
+        }
         if (ray.IsKeyPressed(ray.KEY_U)) {
             seqRec = true;
         }
@@ -198,15 +216,15 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //defer ray.EndDrawing();
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW WAV Display
-        ray.ClearBackground(ray.DARKGRAY);
-        ray.DrawRectangle(10, 4, 430, 50, ray.GRAY);
-        ray.DrawRectangleLines(10, 4, 430, 50, ray.BLACK);
+        ray.ClearBackground(ray.BLACK);
+        //ray.DrawRectangle(10, 4, 430, 50, ray.GRAY);
+        ray.DrawRectangleLines(10, 4, 430, 50, ray.WHITE);
 
         for (smplDisp, 0..) |y, x| {
             if (x < sm or x > em) {
                 ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.DARKGRAY);
             } else {
-                ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.BLACK);
+                ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.WHITE);
             }
         }
 
@@ -219,20 +237,23 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW MENU Display
-        ray.DrawRectangle(10, 65, 210, 47, ray.GRAY);
-        ray.DrawRectangleLines(10, 65, 210, 47, ray.BLACK);
-        ray.DrawText(padString, 12, 70, 13, ray.BLACK);
-        ray.DrawText(menu.current(), 12, 85, 25, ray.BLACK);
+        //ray.DrawRectangle(10, 65, 210, 47, ray.GRAY);
+        var mText = menu.current();
+        const concatenated = try helper.SubString(std.heap.page_allocator, @constCast(mText), 30);
+        defer std.heap.page_allocator.free(concatenated);
+        ray.DrawRectangleLines(10, 65, 430, 47, ray.WHITE);
+        ray.DrawText(padString, 12, 70, 13, ray.WHITE);
+        ray.DrawText(@ptrCast(@constCast(concatenated)), 12, 85, 25, ray.WHITE);
         if (joyStickDetected) {
-            ray.DrawCircle(210, 75, 5, ray.GREEN);
+            ray.DrawCircle(430, 75, 5, ray.GREEN);
         } else {
-            ray.DrawCircle(210, 75, 5, ray.RED);
+            ray.DrawCircle(430, 75, 5, ray.RED);
         }
 
         if (sequencer.recording) {
-            ray.DrawCircle(230, 75, 5, ray.RED);
+            ray.DrawCircle(450, 75, 5, ray.RED);
         } else {
-            ray.DrawCircle(230, 75, 5, ray.GREEN);
+            ray.DrawCircle(450, 75, 5, ray.GREEN);
         }
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW Buttons
@@ -242,3 +263,16 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
     }
 }
+
+pub const ButtonState = struct {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+    select: bool,
+    start: bool,
+    a: bool,
+    b: bool,
+    x: bool,
+    y: bool,
+};

@@ -23,7 +23,8 @@ pub fn build(b: *std.build.Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    const default_build = [_][]const u8{"-std=c99"};
+    // const default_build = [_][]const u8{"-std=c99"};
+    const default_build = [_][]const u8{"-std=gnu99"};
     exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
     switch (exe.target.toTarget().os.tag) {
         .macos => {

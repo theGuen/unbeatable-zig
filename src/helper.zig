@@ -17,6 +17,19 @@ pub fn StringConcat(alloc: std.mem.Allocator, first: []const u8, second: []const
     return concatenated;
 }
 
+pub fn SubString(alloc: std.mem.Allocator, str: [*c]u8, maxLength: usize) ![]const u8 {
+    var retval = try alloc.alloc(u8, maxLength + 1);
+    retval[0] = 0;
+    retval[maxLength] = 0;
+    for (0..maxLength) |i| {
+        retval[i] = str[i];
+        if (str[i] == 0) {
+            return retval;
+        }
+    }
+    return retval;
+}
+
 pub fn StringRemoveNullByte(alloc: std.mem.Allocator, first: []const u8) ![]const u8 {
     var retval: []u8 = undefined;
     if (first[first.len - 1] == 0) {
