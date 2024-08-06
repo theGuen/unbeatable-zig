@@ -30,7 +30,7 @@ pub const Sampler = struct {
     }
     pub fn deinit(self: *Sampler) void {
         for (&self.sounds) |*s| {
-            var b = s.buffer;
+            const b = s.buffer;
 
             s.playing = false;
             s.posf = 0;
@@ -296,9 +296,13 @@ fn pitchSemis(pitch: i64) f32 {
     return p;
 }
 
-pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !void {
-    std.fs.cwd().makeDir(settings.defaultProj) catch {};
-    const dir = std.fs.cwd().openIterableDir(settings.defaultProj, .{}) catch return {};
+pub fn loadDefaultSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !void {
+    const projectName = settings.currentProj;
+    std.fs.cwd().makeDir(projectName) catch {};
+    loadSamplerConfig(alloc, samplers, projectName) catch {};
+}
+pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler, projectName: []u8) !void {
+    const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
     var rfile = dir.dir.openFile("sampler_config.json", .{}) catch return {};
     const body_content = try rfile.readToEndAlloc(alloc, std.math.maxInt(usize));
     defer alloc.free(body_content);
@@ -340,7 +344,7 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
 
     var sw: SamplerW = undefined;
     for (&sw.sounds, 0..) |*snd, i| {
-        const string = try std.fmt.allocPrint(arena.allocator(), "project1/snd_{d}.wav", .{i});
+        const string = try std.fmt.allocPrint(arena.allocator(), "{s}/snd_{d}.wav", .{ settings.currentProj, i });
         snd.name = string;
         snd.gain = sampler.sounds[i].gain;
         snd.start = sampler.sounds[i].start;
@@ -354,12 +358,12 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
         var str = try arena.allocator().alloc(u8, string.len + 1);
         str[string.len] = 0;
         for (string, 0..) |c, ii| str[ii] = c;
-        var join = try joinSample(arena.allocator(), sampler.sounds[i].buffer);
+        const join = try joinSample(arena.allocator(), sampler.sounds[i].buffer);
         try ma.saveAudioFile(str, join);
     }
 
-    std.fs.cwd().makeDir(settings.defaultProj) catch {};
-    const dir = try std.fs.cwd().openIterableDir(settings.defaultProj, .{});
+    std.fs.cwd().makeDir(settings.currentProj) catch {};
+    const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
     var file = try dir.dir.createFile("sampler_config.json", .{});
     defer file.close();
     const fw = file.writer();
@@ -368,8 +372,8 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
 
 pub fn copySample(alloc: std.mem.Allocator, sample: [][]f32) ![][]f32 {
     var ret = try alloc.alloc([]f32, sample.len);
-    var l = try alloc.alloc(f32, sample[0].len);
-    var r = try alloc.alloc(f32, sample[1].len);
+    const l = try alloc.alloc(f32, sample[0].len);
+    const r = try alloc.alloc(f32, sample[1].len);
     for (l, 0..) |*s, i| {
         s.* = sample[0][i];
     }
@@ -383,7 +387,7 @@ pub fn copySample(alloc: std.mem.Allocator, sample: [][]f32) ![][]f32 {
 pub fn splitSample(alloc: std.mem.Allocator, sample: []f32, slen: usize) ![][]f32 {
     //TODO: maybe not my job
     defer alloc.free(sample);
-    var splitLen: usize = slen / 2;
+    const splitLen: usize = slen / 2;
     const sam = sample;
     var l = try alloc.alloc(f32, splitLen);
     var r = try alloc.alloc(f32, splitLen);

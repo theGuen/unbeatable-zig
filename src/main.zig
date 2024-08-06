@@ -37,13 +37,13 @@ pub fn main() !void {
 
     sampler = smplr.initSampler(alloc);
     defer sampler.deinit();
-    try smplr.loadSamplerConfig(alloc, &sampler);
+    try smplr.loadDefaultSamplerConfig(alloc, &sampler);
     var recorder = rcdr.newRecorder(alloc);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const arenaAlloc = arena.allocator();
-    var fxMenuItems = try ma.init(alloc, arenaAlloc, mix, &recorder);
+    const fxMenuItems = try ma.init(alloc, arenaAlloc, mix, &recorder);
 
     _ = seq.newSequencer(arenaAlloc, &sampler);
 

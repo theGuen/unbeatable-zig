@@ -1,10 +1,11 @@
 //Sequencer
 pub var bpm: c_int = 85;
-pub var minute: c_int = 60000000;
-pub var ppq: c_int = 96;
+pub const minute: c_int = 60000000;
+pub const ppq: c_int = 96;
 
 //Sampler
-pub const defaultProj: []u8 = @constCast("project1");
+//pub const defaultProj: []u8 = @constCast("project1");
+pub var currentProj: []u8 = @constCast("project1.asd");
 
 //Audio
 pub const coreaudioDefaultDevice: []u8 = @constCast("Externe Kopfhörer");

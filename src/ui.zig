@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 
 const ray = @cImport(@cInclude("raylibwrapper.h"));
 const mn = @import("menu.zig");
+const mnImpl = @import("menuImpl.zig");
 const smplr = @import("sampler.zig");
 const helper = @import("helper.zig");
 const seq = @import("sequencer.zig");

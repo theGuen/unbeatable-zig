@@ -96,8 +96,8 @@ pub fn newSequencer(
 }
 
 pub fn saveSequence(seq: *Sequencer) !void {
-    std.fs.cwd().makeDir(settings.defaultProj) catch {};
-    const dir = try std.fs.cwd().openIterableDir(settings.defaultProj, .{});
+    std.fs.cwd().makeDir(settings.currentProj) catch {};
+    const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
     var file = try dir.dir.createFile("sequence.json", .{});
     defer file.close();
     const fw = file.writer();

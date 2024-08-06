@@ -7,6 +7,7 @@ pub fn StringHasSuffix(string: []const u8, suffix: []const u8) bool {
     var retval = true;
     if (suffix.len > string.len) return false;
     for (suffix, 0..) |c, i| {
+        //std.debug.print("{c} - {c}\n", .{ string[string.len - suffix.len + i], c });
         retval = retval and (string[string.len - suffix.len + i] == c);
     }
     return retval;
