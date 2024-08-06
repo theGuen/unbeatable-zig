@@ -45,10 +45,11 @@ pub fn main() !void {
     const arenaAlloc = arena.allocator();
     var fxMenuItems = try ma.init(alloc, arenaAlloc, mix, &recorder);
 
-    var menu: mn.Menu = try mn.initMenu(alloc, arenaAlloc, &sampler, &recorder, fxMenuItems);
+    _ = seq.newSequencer(arenaAlloc, &sampler);
+
+    var menu: mn.Menu = try mn.initMenu(alloc, arenaAlloc, &sampler, &recorder, &seq.sequencer, fxMenuItems);
     defer menu.deinit();
 
-    _ = seq.newSequencer(arenaAlloc, &sampler);
     //--------------------------------------------------------------------------------------------------------------------------
     //_ = async asyncMain();
     //--------------------------------------------------------------------------------------------------------------------------

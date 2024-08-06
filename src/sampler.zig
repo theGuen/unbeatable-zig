@@ -7,6 +7,7 @@ var m = std.Thread.Mutex{};
 pub const Sampler = struct {
     alloc: std.mem.Allocator,
     selectedSound: usize,
+    row: c_int,
     sounds: [16]Sound,
     pub fn load(self: *Sampler, sample: [][]f32, padNum: usize) void {
         self.selectedSound = padNum;
@@ -128,12 +129,16 @@ pub const Sampler = struct {
         return @intFromFloat(self.sounds[self.selectedSound].posf);
     }
     pub fn copySound(self: *Sampler, src: usize, dest: usize) bool {
-        var sound: *Sound = &self.sounds[src];
+        const sound: *Sound = &self.sounds[src];
         var soundd = &self.sounds[dest];
         soundd.playing = false;
-        var b = sound.buffer;
-        var nb = copySample(self.alloc, b) catch return false;
-        self.load(nb, dest);
+        const b = sound.buffer;
+        if (b.len > 0) {
+            const nb = copySample(self.alloc, b) catch return false;
+            self.load(nb, dest);
+        } else {
+            soundd.buffer = &[_][]f32{};
+        }
 
         soundd.gain = sound.gain;
         soundd.start = sound.start;
@@ -148,7 +153,7 @@ pub const Sampler = struct {
     }
 };
 pub fn initSampler(alloc: std.mem.Allocator) Sampler {
-    var this = Sampler{ .alloc = alloc, .selectedSound = 0, .sounds = undefined };
+    var this = Sampler{ .alloc = alloc, .selectedSound = 0, .row = 0, .sounds = undefined };
     for (&this.sounds, 0..) |*s, i| {
         s.buffer = &[_][]f32{};
         s.posf = 0;

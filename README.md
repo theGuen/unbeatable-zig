@@ -1,4 +1,4 @@
-# My first zig project
+# Arcade Drum Center
 Hopefully it will become a drum machine
 
 zig is version 0.11.0 (asdf)
@@ -120,3 +120,5 @@ raspberry build
 zig build -Dtarget=aarch64-linux-gnu.2.31
 
 Started to add a sequencer.
+raspberry
+scp unbeatable pi@192.168.178.53:

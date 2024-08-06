@@ -44,7 +44,7 @@ pub fn build(b: *std.build.Builder) void {
             @panic("Unsupported OS");
         },
     }
-
+    //exe.linkSystemLibrary("atomic");
     exe.addIncludePath(.{ .path = "timer" });
     exe.addCSourceFile(.{ .file = .{ .path = "timer/timer.c" }, .flags = &default_build });
     exe.addIncludePath(.{ .path = "miniaudio/split" });

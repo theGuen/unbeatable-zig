@@ -18,15 +18,15 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
     defer ray.CloseWindow();
     ray.SetTargetFPS(30);
-
-    var buttons: [16]ray.Rectangle = undefined;
+    const cols = 4;
+    var buttons: [cols * 4]ray.Rectangle = undefined;
     for (&buttons, 0..) |*b, i| {
-        const ix = @as(f32, @floatFromInt(10 + (i % 4) * 10 + (i % 4) * 100));
-        const iy = @as(f32, @floatFromInt(120 + (i / 4) * 10 + (i / 4) * 70));
+        const ix = @as(f32, @floatFromInt(10 + (i % cols) * 10 + (i % cols) * 100));
+        const iy = @as(f32, @floatFromInt(120 + (i / cols) * 10 + (i / cols) * 70));
         b.* = ray.Rectangle{ .x = ix, .y = iy, .width = 100, .height = 70 };
     }
 
-    var btn_colors: [16]ray.Color = undefined;
+    var btn_colors: [cols * 4]ray.Color = undefined;
     for (&btn_colors) |*b| {
         b.* = ray.GREEN;
     }
@@ -42,7 +42,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     var right_prev = false;
     var up_prev = false;
     var down_prev = false;
-    var seqRec = false;
+
     while (!ray.WindowShouldClose()) {
         currentPad = samplers.selectedSound;
         joyStickDetected = ray.IsGamepadAvailable(0);
@@ -106,7 +106,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         }
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC MENU Display
-        var padStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}", .{currentPad}) catch "";
+        const padStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}", .{currentPad}) catch "";
         defer std.heap.page_allocator.free(padStr);
         const padString = @as([*c]u8, @constCast(@ptrCast(padStr)));
         //--------------------------------------------------------------------------------------------------------------------------
@@ -114,32 +114,36 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         defer ray.EndDrawing();
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC MENU INPUT
-        var vx = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_X);
-        var vy = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_Y);
+        const vx = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_X);
+        const vy = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_Y);
         left = vx < 0;
         right = vx > 0;
         up = vy < 0;
         down = vy > 0;
 
-        var but_a = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        var but_a_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        var but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-        var but_b_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-        var but_x = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        var but_x_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        var but_y = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
-        var but_y_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
-        var but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
-        var but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
+        const but_a = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+        const but_a_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+        const but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        const but_b_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
+        const but_x = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+        const but_x_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
+        const but_y = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
+        const but_y_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
+        const but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
+        const but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
 
-        if (but_a and !but_b) samplers.play(0, true);
-        if (but_a_rel) samplers.stop(0);
-        if (but_b and !but_a) samplers.play(1, true);
-        if (but_b_rel) samplers.stop(1);
-        if (but_x and !but_y) samplers.play(2, true);
-        if (but_x_rel) samplers.stop(2);
-        if (but_y and !but_x) samplers.play(3, true);
-        if (but_y_rel) samplers.stop(3);
+        const r: usize = @intCast(samplers.row);
+        if (but_a and !but_b) samplers.play(0 + (4 * r), true);
+        if (but_a_rel) samplers.stop(0 + (4 * r));
+
+        if (but_b and !but_a) samplers.play(1 + (4 * r), true);
+        if (but_b_rel) samplers.stop(1 + (4 * r));
+
+        if (but_x and !but_y) samplers.play(2 + (4 * r), true);
+        if (but_x_rel) samplers.stop(2 + (4 * r));
+
+        if (but_y and !but_x) samplers.play(3 + (4 * r), true);
+        if (but_y_rel) samplers.stop(3 + (4 * r));
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
             _ = menu.prev();
@@ -167,7 +171,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         // CALC PAD INPUT
         if (but_a and but_b) {
             std.debug.print("Seq prepared\n", .{});
-            seqRec = true;
+            sequencer.prepared = true;
         }
         if (but_x and but_y) {
             _ = sequencer.stopRecording();
@@ -178,12 +182,12 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         if (but_a and but_y) {
             _ = sequencer.stopPlaying();
         }
-        if (seqRec and (but_a or but_b or but_x or but_y)) {
+        if (sequencer.prepared and (but_a or but_b or but_x or but_y)) {
             _ = sequencer.startRecording();
-            seqRec = false;
+            sequencer.prepared = false;
         }
         if (ray.IsKeyPressed(ray.KEY_U)) {
-            seqRec = true;
+            sequencer.prepared = true;
         }
         if (ray.IsKeyPressed(ray.KEY_I)) {
             _ = sequencer.stopRecording();
@@ -197,18 +201,18 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         for (keys, 0..) |k, i| {
             if (ray.IsKeyPressed(k)) {
-                if (seqRec) {
+                if (sequencer.prepared) {
                     _ = sequencer.startRecording();
-                    seqRec = false;
+                    sequencer.prepared = false;
                 }
-                samplers.play(i, true);
-                btn_colors[i] = ray.ORANGE;
-                currentPad = i;
+                samplers.play(i + (4 * r), true);
+                btn_colors[i + (4 * r)] = ray.ORANGE;
+                currentPad = i + (4 * r);
                 sequencer.appendToRecord(currentPad);
             }
             if (ray.IsKeyReleased(k)) {
-                samplers.stop(i);
-                btn_colors[i] = ray.GREEN;
+                samplers.stop(i + (4 * r));
+                btn_colors[i + (4 * r)] = ray.GREEN;
             }
         }
         //--------------------------------------------------------------------------------------------------------------------------
@@ -228,9 +232,9 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             }
         }
 
-        var sm_c = @as(c_int, @intCast(sm));
-        var em_c = @as(c_int, @intCast(em));
-        var ph = @as(c_int, @intFromFloat(cm));
+        const sm_c = @as(c_int, @intCast(sm));
+        const em_c = @as(c_int, @intCast(em));
+        const ph = @as(c_int, @intFromFloat(cm));
         ray.DrawLine(10 + ph, 4, 10 + ph, 54, ray.RED);
         ray.DrawLine(10 + sm_c, 4, 10 + sm_c, 54, ray.ORANGE);
         ray.DrawLine(10 + em_c, 4, 10 + em_c, 54, ray.ORANGE);
@@ -238,7 +242,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW MENU Display
         //ray.DrawRectangle(10, 65, 210, 47, ray.GRAY);
-        var mText = menu.current();
+        const mText = menu.current();
         const concatenated = try helper.SubString(std.heap.page_allocator, @constCast(mText), 30);
         defer std.heap.page_allocator.free(concatenated);
         ray.DrawRectangleLines(10, 65, 430, 47, ray.WHITE);
@@ -260,6 +264,11 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         for (&buttons, 0..) |*b, i| {
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
+        // DRAW Active Buttons (Gamepi)
+        const i: c_int = @intCast(r);
+        const ix = @as(c_int, 5);
+        const iy = 115 + i * 10 + i * 70;
+        ray.DrawRectangleLines(ix, iy, 440, 80, ray.RED);
         //--------------------------------------------------------------------------------------------------------------------------
     }
 }
