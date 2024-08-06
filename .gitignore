@@ -1,6 +1,7 @@
 c_examples/
 .vscode/
 zig-cache/
+.zig-cache/
 zig-out/
 project*/
 project1_backup/
