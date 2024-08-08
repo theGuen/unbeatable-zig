@@ -219,13 +219,14 @@ fn currentmovelazy(self: *SamplerValue) [*c]const u8 {
 
 fn upcopy(self: *SamplerValue) void {
     //std.debug.print("self.state.stateValInt {d}\n", .{self.state.stateValInt});
-    if (self.state.stateValInt > 0) {
-        const src: usize = @intCast(self.state.stateValInt);
+    if (self.state.stateValInt == 1) {
+        const src: usize = @intCast(self.state.selection);
         _ = self.sampler.copySound(src, self.sampler.selectedSound);
         self.state.stateValInt = 0;
     } else {
         const s = self.sampler.selectedSound;
-        self.state.stateValInt = @intCast(s);
+        self.state.selection = @intCast(s);
+        self.state.stateValInt = 1;
     }
 }
 fn downcopy(self: *SamplerValue) void {
@@ -234,10 +235,25 @@ fn downcopy(self: *SamplerValue) void {
 fn currentcopy(self: *SamplerValue) [*c]const u8 {
     std.heap.page_allocator.free(self.state.stateValStr);
     if (self.state.stateValInt > 0) {
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d} to {d}", .{ self.label, self.state.stateValInt, self.sampler.selectedSound }) catch "";
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d} to {d}", .{ self.label, self.state.selection, self.sampler.selectedSound }) catch "";
     } else {
         self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} from {d}", .{ self.label, self.sampler.selectedSound }) catch "";
     }
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upcrop(self: *SamplerValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    _ = self.sampler.cropSound(self.sampler.selectedSound);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "croping", .{}) catch "";
+}
+fn downcrop(self: *SamplerValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "crop sample", .{}) catch "";
+}
+fn currentcrop(self: *SamplerValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "crop sample", .{}) catch "";
     return @ptrCast(self.state.stateValStr);
 }
 
@@ -345,7 +361,7 @@ pub const SamplerMenuItem = struct {
 
 pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]SamplerMenuItem {
     var samplerMenuItem: []SamplerMenuItem = try alloc.alloc(SamplerMenuItem, 1);
-    var menuValues: []SamplerValue = try alloc.alloc(SamplerValue, 12);
+    var menuValues: []SamplerValue = try alloc.alloc(SamplerValue, 14);
     menuValues[0] = SamplerValue{ .sampler = sampler, .label = "gain", .increment = upgain, .decrement = downgain, .current = currentgain, .state = mn.newState() };
     menuValues[1] = SamplerValue{ .sampler = sampler, .label = "reverse", .increment = upreverse, .decrement = downreverse, .current = currentreverse, .state = mn.newState() };
     menuValues[2] = SamplerValue{ .sampler = sampler, .label = "loop", .increment = uploop, .decrement = downloop, .current = currentloop, .state = mn.newState() };
@@ -359,7 +375,8 @@ pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]Sa
     menuValues[9] = SamplerValue{ .sampler = sampler, .label = "lazyend", .increment = upendlazy, .decrement = downendlazy, .current = currentendlazy, .state = mn.newState() };
     menuValues[10] = SamplerValue{ .sampler = sampler, .label = "move", .increment = upmovelazy, .decrement = downmovelazy, .current = currentmovelazy, .state = mn.newState() };
     menuValues[11] = SamplerValue{ .sampler = sampler, .label = "copy", .increment = upcopy, .decrement = downcopy, .current = currentcopy, .state = mn.newState() };
-    menuValues[11] = SamplerValue{ .sampler = sampler, .label = "row", .increment = uprow, .decrement = downrow, .current = currentrow, .state = mn.newState() };
+    menuValues[12] = SamplerValue{ .sampler = sampler, .label = "crop", .increment = upcrop, .decrement = downcrop, .current = currentcrop, .state = mn.newState() };
+    menuValues[13] = SamplerValue{ .sampler = sampler, .label = "row", .increment = uprow, .decrement = downrow, .current = currentrow, .state = mn.newState() };
 
     samplerMenuItem[0].label = "Sampler";
     samplerMenuItem[0].active = false;
@@ -403,9 +420,27 @@ fn currentrecord(self: *RecorderValue) [*c]const u8 {
     }
     return @ptrCast(self.state.stateValStr);
 }
+
+fn upLineIn(self: *RecorderValue) void {
+    self.recorder.lineIn = true;
+}
+fn downLineIn(self: *RecorderValue) void {
+    self.recorder.lineIn = false;
+}
+fn currentLineIn(self: *RecorderValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    if (self.recorder.lineIn) {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Line in enabled", .{}) catch "";
+    } else {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Line in disabled", .{}) catch "";
+    }
+    return @ptrCast(self.state.stateValStr);
+}
+
 fn uprecseq(self: *RecorderValue) void {
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "sequence prepared", .{}) catch "";
     self.state.stateValInt = 1;
+    self.sequencer.setBPM();
     self.sequencer.prepared = true;
 }
 fn downrecseq(self: *RecorderValue) void {
@@ -440,6 +475,53 @@ fn currentplayseq(self: *RecorderValue) [*c]const u8 {
     } else {
         self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "play sequence", .{}) catch "";
     }
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upclickTrack(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    for (0..16) |x| {
+        self.sequencer.appendalways(self.sampler.selectedSound, @intCast(x * settings.ppq));
+    }
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "creating clicktrack", .{}) catch "";
+}
+fn downclickTrack(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "clicktrack Pad: {}", .{self.sampler.selectedSound}) catch "";
+}
+fn currentclickTrack(self: *RecorderValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "clicktrack Pad: {}", .{self.sampler.selectedSound}) catch "";
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upQuant(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.sequencer.quantize();
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Quantize 1/16", .{}) catch "";
+}
+fn downQuant(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Quantize 1/16", .{}) catch "";
+}
+fn currentQuant(self: *RecorderValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Quantize 1/16", .{}) catch "";
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upDelAll(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.sequencer.deletePad(self.sampler.selectedSound);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Delete All Pad {d}", .{self.sampler.selectedSound}) catch "";
+}
+fn downDelAll(self: *RecorderValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Delete All Pad {d}", .{self.sampler.selectedSound}) catch "";
+}
+fn currentDelAll(self: *RecorderValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "Delete All Pad {d}", .{self.sampler.selectedSound}) catch "";
     return @ptrCast(self.state.stateValStr);
 }
 
@@ -555,11 +637,15 @@ pub const RecorderMenuItem = struct {
 
 pub fn buildRecorderMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, sampler: *smplr.Sampler) ![]RecorderMenuItem {
     var menuItem: []RecorderMenuItem = try alloc.alloc(RecorderMenuItem, 1);
-    var menuValues: []RecorderValue = try alloc.alloc(RecorderValue, 4);
+    var menuValues: []RecorderValue = try alloc.alloc(RecorderValue, 8);
     menuValues[0] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "record sample", .increment = uprecord, .decrement = downrecord, .current = currentrecord, .loaded = false, .state = mn.newState() };
-    menuValues[1] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "record sequence", .increment = uprecseq, .decrement = downrecseq, .current = currentrecseq, .loaded = false, .state = mn.newState() };
-    menuValues[2] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "play sequence", .increment = upplayseq, .decrement = downplayseq, .current = currentplayseq, .loaded = false, .state = mn.newState() };
-    menuValues[3] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "delete sequence", .increment = updelseq, .decrement = downdelseq, .current = currentdelseq, .loaded = false, .state = mn.newState() };
+    menuValues[1] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "enable line in", .increment = upLineIn, .decrement = downLineIn, .current = currentLineIn, .loaded = false, .state = mn.newState() };
+    menuValues[2] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "record sequence", .increment = uprecseq, .decrement = downrecseq, .current = currentrecseq, .loaded = false, .state = mn.newState() };
+    menuValues[3] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "play sequence", .increment = upplayseq, .decrement = downplayseq, .current = currentplayseq, .loaded = false, .state = mn.newState() };
+    menuValues[4] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "delete sequence", .increment = updelseq, .decrement = downdelseq, .current = currentdelseq, .loaded = false, .state = mn.newState() };
+    menuValues[5] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "clicktrack", .increment = upclickTrack, .decrement = downclickTrack, .current = currentclickTrack, .loaded = false, .state = mn.newState() };
+    menuValues[6] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quantize", .increment = upQuant, .decrement = downQuant, .current = currentQuant, .loaded = false, .state = mn.newState() };
+    menuValues[7] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "delete pad", .increment = upDelAll, .decrement = downDelAll, .current = currentDelAll, .loaded = false, .state = mn.newState() };
 
     menuItem[0].label = "Recorder";
     menuItem[0].active = false;
@@ -591,9 +677,11 @@ pub const FileMenuItem = struct {
         };
     }
     pub fn enter(self: *FileMenuItem) void {
+        self.selected = 0;
         self.menuValues = h.readDirectory(self.alloc, ".") catch return {};
         self.valueStr = self.menuValues.items[self.selected].name;
     }
+
     pub fn right(self: *FileMenuItem) void {
         const item = self.menuValues.items[self.selected];
         if (item.file) {

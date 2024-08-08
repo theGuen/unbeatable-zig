@@ -6,8 +6,10 @@ const h = @import("helper.zig");
 const ma = @import("miniaudio.zig");
 const seq = @import("sequencer.zig");
 const mimpl = @import("menuImpl.zig");
+const projMenuImpl = @import("menuProjectImpl.zig");
 
 pub const State = struct {
+    selection: i64,
     stateValInt: i64,
     stateValFloat: f32,
     stateValStr: []const u8,
@@ -17,6 +19,7 @@ pub fn newState() State {
     //TODO: 0 termination in 0.11
     //stateStr[stateStr.len - 1] = 0;
     return State{
+        .selection = -1,
         .stateValInt = 0,
         .stateValFloat = 0,
         .stateValStr = stateStr,
@@ -97,13 +100,15 @@ pub fn initMenu(notArena: std.mem.Allocator, alloc: std.mem.Allocator, sampler: 
     var samplerMenu = try mimpl.buildSamplerMenu(alloc, sampler);
     var recorderMenu = try mimpl.buildRecorderMenu(alloc, recorder, sequencer, sampler);
     var fileMenu = try mimpl.buildFIleMenu(alloc, notArena, sampler);
-    var iMenuItems: []ui.IMenuItem = try alloc.alloc(ui.IMenuItem, otherMenuItems.len + 3);
+    var projectMenu = try projMenuImpl.buildProjectMenu(alloc, recorder, sequencer, sampler);
+    var iMenuItems: []ui.IMenuItem = try alloc.alloc(ui.IMenuItem, otherMenuItems.len + 4);
 
     iMenuItems[0] = samplerMenu[0].iMenuItem();
     iMenuItems[1] = recorderMenu[0].iMenuItem();
     iMenuItems[2] = fileMenu[0].iMenuItem();
+    iMenuItems[3] = projectMenu[0].iMenuItem();
 
-    for (otherMenuItems, 0..) |*omi, i| iMenuItems[i + 3] = omi.iMenuItem();
+    for (otherMenuItems, 0..) |*omi, i| iMenuItems[i + 4] = omi.iMenuItem();
     var menu: Menu = undefined;
     menu.alloc = alloc;
     menu._currentIndex = 0;

@@ -88,9 +88,10 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
 }
 
 pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
-    _ = input;
+    //_ = input;
     _ = mydevice;
     var outw = @as([*c]f32, @ptrCast(@alignCast(out)));
+    const inw = @as([*c]f32, @constCast(@ptrCast(@alignCast(input))));
 
     //Should we reuse the samebuffer?
     var mixBuffer = allocator.alloc([*c]f32, 2) catch return {};
@@ -122,7 +123,16 @@ pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const
     const rlen: usize = @intCast(frame_count * 2);
     var rb = allocator.alloc(f32, rlen) catch return {};
     //The recorder has to free this
-
+    if (recorder.lineIn) {
+        {
+            var i: usize = 0;
+            while (i < frame_count) {
+                l[i] += inw[i * 2];
+                r[i] += inw[i * 2 + 1];
+                i += 1;
+            }
+        }
+    }
     // Output loop
     {
         var i: usize = 0;
@@ -134,13 +144,15 @@ pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const
             i += 1;
         }
     }
-    //send to recorder
-    recorder.appendToRecord(rb);
+    if (recorder.recording) {
+        //send to recorder
+        recorder.appendToRecord(rb);
+    }
 }
 
 pub fn startAudio() !bool {
     var device = std.mem.zeroes(ma.ma_device);
-    var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_playback);
+    var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_duplex);
     deviceConfig.playback.format = ma.ma_format_f32;
     deviceConfig.playback.channels = 2;
     deviceConfig.sampleRate = 44100;

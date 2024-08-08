@@ -57,7 +57,7 @@ pub fn main() !void {
     var context: mah.ma_context = undefined;
     var pPlaybackInfos: [*c]mah.ma_device_info = undefined;
     var playbackCount: mah.ma_uint32 = 0;
-    var pCaptureInfos: ?*mah.ma_device_info = undefined;
+    var pCaptureInfos: [*c]mah.ma_device_info = undefined;
     var captureCount: mah.ma_uint32 = 0;
 
     var backends = [4]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_pulseaudio, mah.ma_backend_alsa, mah.ma_backend_jack };
@@ -70,10 +70,16 @@ pub fn main() !void {
     }
     std.debug.print("INFO: selected backend: {d}, {s}\n", .{ context.backend, mah.ma_get_backend_name(context.backend) });
     var deviceId: [*c]mah.ma_device_id = undefined;
+    var deviceIdCapture: [*c]mah.ma_device_id = undefined;
     var deviceIdDefault: [*c]mah.ma_device_id = undefined;
+    var deviceIdDefaultCapture: [*c]mah.ma_device_id = undefined;
     for (0..playbackCount) |x| {
-        std.debug.print("INFO:\t> available device: {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
+        std.debug.print("INFO:\t> available playback device: {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
     }
+    for (0..captureCount) |x| {
+        std.debug.print("INFO:\t> available capture device: {d}, {s}\n", .{ x, pCaptureInfos[x].name });
+    }
+
     var found = false;
     for (0..playbackCount) |x| {
         if (context.backend == mah.ma_backend_coreaudio and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.coreaudioDefaultDevice)) {
@@ -92,15 +98,38 @@ pub fn main() !void {
         }
     }
     if (!found) {
-        std.debug.print("INFO:\t> using default \n", .{});
+        std.debug.print("INFO:\t> using default playback\n", .{});
         deviceId = deviceIdDefault;
+    }
+    found = false;
+    for (0..captureCount) |x| {
+        if (context.backend == mah.ma_backend_coreaudio and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.coreaudioDefaultDevice)) {
+            deviceIdCapture = &pCaptureInfos[x].id;
+            found = true;
+            std.debug.print("INFO: selected capture device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
+        }
+        if (pCaptureInfos[x].isDefault == 1) {
+            deviceIdDefaultCapture = &pCaptureInfos[x].id;
+            std.debug.print("INFO: default capture device : {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
+        }
+    }
+    if (!found) {
+        std.debug.print("INFO:\t> using default capture \n", .{});
+        deviceIdCapture = deviceIdDefaultCapture;
     }
 
     var device = std.mem.zeroes(mah.ma_device);
-    var deviceConfig = mah.ma_device_config_init(mah.ma_device_type_playback);
+    var deviceConfig = mah.ma_device_config_init(mah.ma_device_type_duplex);
+
     deviceConfig.playback.pDeviceID = @constCast(deviceId);
     deviceConfig.playback.format = mah.ma_format_f32;
     deviceConfig.playback.channels = 2;
+
+    deviceConfig.capture.pDeviceID = @constCast(deviceIdCapture);
+    deviceConfig.capture.format = mah.ma_format_f32;
+    deviceConfig.capture.channels = 2;
+    deviceConfig.capture.shareMode = mah.ma_share_mode_shared;
+
     deviceConfig.sampleRate = 44100;
     deviceConfig.dataCallback = ma.audio_callback;
     deviceConfig.pUserData = null;
@@ -118,14 +147,27 @@ pub fn main() !void {
     }
     defer r = mah.ma_device_stop(&device);
 
-    //std.debug.print("INFO: Device Sample rates:{d}\n", .{device.playback.internalSampleRate});
-    //std.debug.print("INFO: Device internal channels:{d}\n\n", .{device.playback.internalChannels});
+    std.debug.print("INFO: Playbak Device Sample rates:{d}\n", .{device.playback.internalSampleRate});
+    std.debug.print("INFO: Playbak Device internal channels:{d}\n\n", .{device.playback.internalChannels});
+    std.debug.print("INFO: Capture Device Sample rates:{d}\n", .{device.capture.internalSampleRate});
+    std.debug.print("INFO: Capture Device internal channels:{d}\n\n", .{device.capture.internalChannels});
     //--------------------------------------------------------------------------------------------------------------------------
     //
     //loop forever
     _ = try ui.drawWindow(&sampler, &menu, &seq.sequencer);
+    std.debug.print("INFO: saving Sampler\n", .{});
     try smplr.saveSamplerConfig(alloc, &sampler);
+    std.debug.print("INFO: saving Sequence\n", .{});
     try seq.saveSequence(&seq.sequencer);
 
     //resume ma.startAudioFrame;
+
+    const argv = [_][]const u8{ "/bin/sh", settings.script_path };
+    std.debug.print("INFO: {s}\n", .{argv});
+    const proc = try std.ChildProcess.exec(.{
+        .allocator = alloc,
+        .argv = &argv,
+    });
+    defer alloc.free(proc.stdout);
+    defer alloc.free(proc.stderr);
 }

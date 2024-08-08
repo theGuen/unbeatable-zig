@@ -4,30 +4,76 @@ const seq = @import("sequencer.zig");
 const std = @import("std");
 const smplr = @import("sampler.zig");
 const menu = @import("menu.zig");
+const settings = @import("settings.zig");
 
-fn upload(self: *ProjectValue) void {
-    //try smplr.loadSamplerConfig(alloc, &sampler);
+fn upsave(self: *ProjectValue) void {
+    smplr.saveSamplerConfig(self.alloc, self.sampler) catch {};
+    seq.saveSequence(self.sequencer) catch {};
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValInt = 1;
-    self.sequencer.clearRecording();
-    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "sequence deleted", .{}) catch "";
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "project saved", .{}) catch "";
 }
-fn download(self: *ProjectValue) void {
+fn downsave(self: *ProjectValue) void {
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValInt = 0;
-    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "delete sequence", .{}) catch "";
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "save project", .{}) catch "";
 }
-fn currentload(self: *ProjectValue) [*c]const u8 {
+fn currentsave(self: *ProjectValue) [*c]const u8 {
     std.heap.page_allocator.free(self.state.stateValStr);
     if (self.state.stateValInt == 1) {
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "sequence deleted", .{}) catch "";
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "project saved", .{}) catch "";
     } else {
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "delete sequence", .{}) catch "";
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "save project", .{}) catch "";
+    }
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upBPM(self: *ProjectValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    settings.bpm = settings.bpm + 1;
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "BPM {d}", .{settings.bpm}) catch "";
+}
+fn downBPM(self: *ProjectValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    settings.bpm = settings.bpm - 1;
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "BPM {d}", .{settings.bpm}) catch "";
+}
+fn currentBPM(self: *ProjectValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "BPM {d}", .{settings.bpm}) catch "";
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upexit(self: *ProjectValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValInt = self.state.stateValInt + 1;
+    if (self.state.stateValInt == 1) {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "confirm", .{}) catch "";
+    }
+    if (self.state.stateValInt == 2) {
+        settings.exit = true;
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "leaving", .{}) catch "";
+    }
+}
+fn downexit(self: *ProjectValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValInt = 0;
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "quit", .{}) catch "";
+}
+fn currentexit(self: *ProjectValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    if (self.state.stateValInt == 2) {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "leaving", .{}) catch "";
+    } else if (self.state.stateValInt == 1) {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "confirm", .{}) catch "";
+    } else {
+        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "quit", .{}) catch "";
     }
     return @ptrCast(self.state.stateValStr);
 }
 
 const ProjectValue = struct {
+    alloc: std.mem.Allocator,
     recorder: *rcdr.Recorder,
     sequencer: *seq.Sequencer,
     sampler: *smplr.Sampler,
@@ -116,10 +162,12 @@ pub const ProjectMenuItem = struct {
     }
 };
 
-fn buildProjectMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, sampler: *smplr.Sampler) ![]ProjectMenuItem {
+pub fn buildProjectMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, sampler: *smplr.Sampler) ![]ProjectMenuItem {
     var menuItem: []ProjectMenuItem = try alloc.alloc(ProjectMenuItem, 1);
-    var menuValues: []ProjectValue = try alloc.alloc(ProjectValue, 1);
-    menuValues[0] = ProjectValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "load project", .increment = upload, .decrement = download, .current = currentload, .loaded = false, .state = newState() };
+    var menuValues: []ProjectValue = try alloc.alloc(ProjectValue, 3);
+    menuValues[0] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "project BPM", .increment = upBPM, .decrement = downBPM, .current = currentBPM, .loaded = false, .state = menu.newState() };
+    menuValues[1] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "save project", .increment = upsave, .decrement = downsave, .current = currentsave, .loaded = false, .state = menu.newState() };
+    menuValues[2] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quit ASD", .increment = upexit, .decrement = downexit, .current = currentexit, .loaded = false, .state = menu.newState() };
 
     menuItem[0].label = "Project";
     menuItem[0].active = false;

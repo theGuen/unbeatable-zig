@@ -4,6 +4,7 @@ pub const Recorder = struct {
     alloc: std.mem.Allocator,
     recordList: std.ArrayList([]f32),
     recording: bool,
+    lineIn: bool,
     pub fn startRecording(self: *Recorder) void {
         self.recordList = std.ArrayList([]f32).init(self.alloc);
         self.recording = true;
@@ -34,6 +35,6 @@ pub const Recorder = struct {
 };
 
 pub fn newRecorder(alloc: std.mem.Allocator) Recorder {
-    var this = Recorder{ .alloc = alloc, .recordList = undefined, .recording = false };
+    var this = Recorder{ .alloc = alloc, .recordList = undefined, .recording = false, .lineIn = false };
     return this;
 }

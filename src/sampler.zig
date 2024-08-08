@@ -128,6 +128,16 @@ pub const Sampler = struct {
     pub fn getSoundCurrentPos(self: *Sampler) i64 {
         return @intFromFloat(self.sounds[self.selectedSound].posf);
     }
+    pub fn cropSound(self: *Sampler, src: usize) bool {
+        const sound: *Sound = &self.sounds[src];
+        sound.playing = false;
+        const b = sound.buffer;
+        const nb = cropSample(self.alloc, b, @intFromFloat(sound.start), @intFromFloat(sound.end)) catch return false;
+        sound.buffer = nb;
+        sound.end = sound.end - sound.start - 1;
+        sound.start = 0;
+        return true;
+    }
     pub fn copySound(self: *Sampler, src: usize, dest: usize) bool {
         const sound: *Sound = &self.sounds[src];
         var soundd = &self.sounds[dest];
@@ -379,6 +389,20 @@ pub fn copySample(alloc: std.mem.Allocator, sample: [][]f32) ![][]f32 {
     }
     for (r, 0..) |*s, i| {
         s.* = sample[1][i];
+    }
+    ret[0] = l;
+    ret[1] = r;
+    return ret;
+}
+pub fn cropSample(alloc: std.mem.Allocator, sample: [][]f32, from: usize, to: usize) ![][]f32 {
+    var ret = try alloc.alloc([]f32, to - from);
+    const l = try alloc.alloc(f32, to - from);
+    const r = try alloc.alloc(f32, to - from);
+    for (l, 0..) |*s, i| {
+        s.* = sample[0][from + i];
+    }
+    for (r, 0..) |*s, i| {
+        s.* = sample[1][from + i];
     }
     ret[0] = l;
     ret[1] = r;

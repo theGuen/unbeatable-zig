@@ -62,10 +62,19 @@ pub const Sequencer = struct {
             self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
         }
     }
+    pub fn setBPM(self: *Sequencer) void {
+        tim.stopTimer();
+        const c: c_int = @divFloor(settings.minute, settings.bpm * settings.ppq);
+        self.micros = c;
+        tim.startTimer(c, tick_callback);
+    }
     pub fn appendToRecord(self: *Sequencer, pad: usize) void {
         if (self.recording) {
             self.recordList.append(SequencerEvent{ .timeCode = self.currentTick, .padNumber = pad }) catch return {};
         }
+    }
+    pub fn appendalways(self: *Sequencer, pad: usize, onTick: i64) void {
+        self.recordList.append(SequencerEvent{ .timeCode = onTick, .padNumber = pad }) catch return {};
     }
     pub fn tick(self: *Sequencer) void {
         if (self.playing) {
@@ -80,6 +89,30 @@ pub const Sequencer = struct {
             if (evt.timeCode == timeCode) {
                 self.sampler.play(evt.padNumber, false);
             }
+        }
+    }
+    pub fn deletePad(self: *Sequencer, pad: usize) void {
+        var old = self.recordList;
+        defer old.deinit();
+        self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
+        for (old.items) |evt| {
+            if (evt.padNumber != pad) {
+                self.recordList.append(evt) catch return {};
+            }
+        }
+    }
+    pub fn quantize(self: *Sequencer) void {
+        for (self.recordList.items) |*evt| {
+            if (evt.timeCode < 0) {
+                evt.timeCode = 0;
+                continue;
+            }
+            var x = @divFloor(evt.timeCode, settings.ppq / 4);
+            var new = x * (settings.ppq / 4);
+            if (evt.timeCode - new > settings.ppq / 8) {
+                new = (x + 1) * (settings.ppq / 4);
+            }
+            evt.timeCode = new;
         }
     }
 };

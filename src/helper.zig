@@ -60,6 +60,9 @@ pub fn readDirectory(alloc: std.mem.Allocator, path: []const u8) !std.ArrayList(
 
     var walker = dir.iterate();
     while (try walker.next()) |entry| {
+        if (entry.name[0] == '.') {
+            continue;
+        }
         if (entry.kind == std.fs.File.Kind.directory) {
             var dest = alloc.alloc(u8, entry.name.len + 1) catch return content;
             dest[entry.name.len] = 0;
@@ -82,5 +85,11 @@ pub fn readDirectory(alloc: std.mem.Allocator, path: []const u8) !std.ArrayList(
             }
         }
     }
+
+    // Sort the content by name
+    std.sort.insertion(DirEntry, content.items, {}, compareDirEntry);
     return content;
+}
+fn compareDirEntry(_: void, lhs: DirEntry, rhs: DirEntry) bool {
+    return std.mem.order(u8, lhs.name, rhs.name).compare(std.math.CompareOperator.gt);
 }

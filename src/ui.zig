@@ -44,7 +44,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     var up_prev = false;
     var down_prev = false;
 
-    while (!ray.WindowShouldClose()) {
+    while (!ray.WindowShouldClose() and !settings.exit) {
         currentPad = samplers.selectedSound;
         joyStickDetected = ray.IsGamepadAvailable(0);
         //--------------------------------------------------------------------------------------------------------------------------
@@ -110,6 +110,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const padStr = std.fmt.allocPrint(std.heap.page_allocator, "Pad {d}", .{currentPad}) catch "";
         defer std.heap.page_allocator.free(padStr);
         const padString = @as([*c]u8, @constCast(@ptrCast(padStr)));
+
         //--------------------------------------------------------------------------------------------------------------------------
         ray.BeginDrawing();
         defer ray.EndDrawing();
@@ -134,16 +135,28 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
 
         const r: usize = @intCast(samplers.row);
-        if (but_a and !but_b) samplers.play(0 + (4 * r), true);
+        if (but_a) {
+            samplers.play(0 + (4 * r), true);
+            sequencer.appendToRecord(0 + (4 * r));
+        }
         if (but_a_rel) samplers.stop(0 + (4 * r));
 
-        if (but_b and !but_a) samplers.play(1 + (4 * r), true);
+        if (but_b) {
+            samplers.play(1 + (4 * r), true);
+            sequencer.appendToRecord(1 + (4 * r));
+        }
         if (but_b_rel) samplers.stop(1 + (4 * r));
 
-        if (but_x and !but_y) samplers.play(2 + (4 * r), true);
+        if (but_x) {
+            samplers.play(2 + (4 * r), true);
+            sequencer.appendToRecord(2 + (4 * r));
+        }
         if (but_x_rel) samplers.stop(2 + (4 * r));
 
-        if (but_y and !but_x) samplers.play(3 + (4 * r), true);
+        if (but_y) {
+            samplers.play(3 + (4 * r), true);
+            sequencer.appendToRecord(3 + (4 * r));
+        }
         if (but_y_rel) samplers.stop(3 + (4 * r));
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
@@ -170,34 +183,12 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         down_prev = down;
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC PAD INPUT
-        if (but_a and but_b) {
-            std.debug.print("Seq prepared\n", .{});
-            sequencer.prepared = true;
-        }
-        if (but_x and but_y) {
-            _ = sequencer.stopRecording();
-        }
-        if (but_x and but_b) {
-            _ = sequencer.startPlaying();
-        }
-        if (but_a and but_y) {
-            _ = sequencer.stopPlaying();
-        }
+
         if (sequencer.prepared and (but_a or but_b or but_x or but_y)) {
-            _ = sequencer.startRecording();
-            sequencer.prepared = false;
-        }
-        if (ray.IsKeyPressed(ray.KEY_U)) {
-            sequencer.prepared = true;
-        }
-        if (ray.IsKeyPressed(ray.KEY_I)) {
-            _ = sequencer.stopRecording();
-        }
-        if (ray.IsKeyPressed(ray.KEY_O)) {
-            _ = sequencer.startPlaying();
-        }
-        if (ray.IsKeyPressed(ray.KEY_P)) {
-            _ = sequencer.stopPlaying();
+            if (sequencer.prepared) {
+                _ = sequencer.startRecording();
+                sequencer.prepared = false;
+            }
         }
 
         for (keys, 0..) |k, i| {
@@ -271,6 +262,12 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const iy = 115 + i * 10 + i * 70;
         ray.DrawRectangleLines(ix, iy, 440, 80, ray.RED);
         //--------------------------------------------------------------------------------------------------------------------------
+        for (0..16) |x| {
+            const seqstep = std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2} 00 00 00", .{x}) catch "";
+            defer std.heap.page_allocator.free(seqstep);
+            const seqstepStr = @as([*c]u8, @constCast(@ptrCast(seqstep)));
+            ray.DrawText(seqstepStr, 470, @intCast(40 + x * 25), 25, ray.WHITE);
+        }
     }
 }
 
