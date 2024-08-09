@@ -703,6 +703,7 @@ pub const FileMenuItem = struct {
                 //self.alloc.free(settings.currentProj);
                 settings.currentProj = @constCast(dirName);
                 smplr.loadSamplerConfig(self.alloc, self.sampler, @constCast(dirName)) catch {};
+                seq.loadSequence(&seq.sequencer, self.alloc, @constCast(dirName)) catch return {};
                 self.valueStr = self.alloc.alloc(u8, 7) catch return {};
                 std.mem.copy(u8, self.valueStr[0..6], "loaded"[0..6]);
                 self.valueStr[6] = 0;

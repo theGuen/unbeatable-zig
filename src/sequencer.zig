@@ -139,3 +139,23 @@ pub fn saveSequence(seq: *Sequencer) !void {
     std.json.stringify(sl, .{ .whitespace = .indent_2 }, fw) catch return;
     seq.alloc.free(sl);
 }
+
+pub fn loadSequence(seq: *Sequencer, alloc: std.mem.Allocator, projectName: []u8) !void {
+    std.debug.print("INFO: loading sequence\n", .{});
+    const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
+    var rfile = dir.dir.openFile("sequence.json", .{}) catch return {};
+    const body_content = try rfile.readToEndAlloc(alloc, std.math.maxInt(usize));
+
+    std.debug.print("INFO: read sequence\n", .{});
+    defer alloc.free(body_content);
+    defer rfile.close();
+
+    const parsed = try std.json.parseFromSlice([]SequencerEvent, alloc, body_content, .{});
+    std.debug.print("INFO: parsed sequence\n", .{});
+    defer parsed.deinit();
+    seq.clearRecording();
+    const newOne = parsed.value;
+    for (newOne) |entry| {
+        seq.recordList.append(SequencerEvent{ .timeCode = entry.timeCode, .padNumber = entry.padNumber }) catch return {};
+    }
+}
