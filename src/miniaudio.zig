@@ -87,68 +87,69 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
     return mybuffer;
 }
 
-pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
-    //_ = input;
-    _ = mydevice;
+
+pub fn audio_callback(mydevice: ?*ma.ma_device,out: ?*anyopaque,input: ?*const anyopaque,frame_count: ma.ma_uint32) callconv(.C) void {
+    if (mydevice == null or out == null or input == null) {
+        return;
+    }
+
+    //const allocator = std.heap.page_allocator;
     var outw = @as([*c]f32, @ptrCast(@alignCast(out)));
     const inw = @as([*c]f32, @constCast(@ptrCast(@alignCast(input))));
 
-    //Should we reuse the samebuffer?
-    var mixBuffer = allocator.alloc([*c]f32, 2) catch return {};
-    var l = allocator.alloc(f32, frame_count) catch return {};
-    var r = allocator.alloc(f32, frame_count) catch return {};
+    // Allocate buffers
+    var l = allocator.alloc(f32, frame_count) catch return;
+    var r = allocator.alloc(f32, frame_count) catch return;
+
+    // Allocate mixBuffer (2 channels)
+    var mixBuffer = allocator.alloc([*c]f32, 2) catch {
+        allocator.free(l);
+        allocator.free(r);
+        return;
+    };
     mixBuffer[0] = @as([*c]f32, @ptrCast(@alignCast(l)));
     mixBuffer[1] = @as([*c]f32, @ptrCast(@alignCast(r)));
 
+    defer allocator.free(mixBuffer);
     defer allocator.free(l);
     defer allocator.free(r);
-    defer allocator.free(mixBuffer);
 
-    //Premix loop
-    {
-        var i: usize = 0;
-        while (i < frame_count) {
-            const temp = mix();
-            l[i] = temp[0];
-            r[i] = temp[1];
-            i += 1;
-        }
+    // Premix loop
+    for (0..frame_count) |i| {
+        const temp = mix();
+        l[i] = temp[0];
+        r[i] = temp[1];
     }
 
-    //apply faust dsp
+    // Apply Faust DSP
     var cc2: c_int = @intCast(frame_count);
     var outm: [*c][*c]f32 = @ptrCast(@alignCast(mixBuffer));
     mfx.computemydsp(fx, cc2, outm, outm);
 
+    // Allocate rb for recording
     const rlen: usize = @intCast(frame_count * 2);
-    var rb = allocator.alloc(f32, rlen) catch return {};
-    //The recorder has to free this
+    var rb = allocator.alloc(f32, rlen) catch return;
+
+    // Combine input and mix
     if (recorder.lineIn) {
-        {
-            var i: usize = 0;
-            while (i < frame_count) {
-                l[i] += inw[i * 2];
-                r[i] += inw[i * 2 + 1];
-                i += 1;
-            }
+        for (0..frame_count) |i| {
+            l[i] += inw[i * 2];
+            r[i] += inw[i * 2 + 1];
         }
     }
+
     // Output loop
-    {
-        var i: usize = 0;
-        while (i < frame_count) {
-            outw[i * 2] = l[i];
-            outw[i * 2 + 1] = r[i];
-            rb[i * 2] = l[i];
-            rb[i * 2 + 1] = r[i];
-            i += 1;
-        }
+    for (0..frame_count) |i| {
+        outw[i * 2] = l[i];
+        outw[i * 2 + 1] = r[i];
+        rb[i * 2] = l[i];
+        rb[i * 2 + 1] = r[i];
     }
-    if (recorder.recording) {
-        //send to recorder
-        recorder.appendToRecord(rb);
-    }
+
+    // Send to recorder
+    recorder.appendToRecord(rb);
 }
+
 
 pub fn startAudio() !bool {
     var device = std.mem.zeroes(ma.ma_device);

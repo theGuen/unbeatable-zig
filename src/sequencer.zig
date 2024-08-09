@@ -24,15 +24,18 @@ pub const Sequencer = struct {
     playing: bool,
     currentTick: i64,
     micros: c_int,
+    stepMode: bool,
+    numBars: usize,
     pub fn startRecording(self: *Sequencer) void {
         if (!self.recording) {
-            //self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
             self.recording = true;
             self.playing = true;
             self.currentTick = -1;
         }
     }
     pub fn startPlaying(self: *Sequencer) void {
+        self.sort();
+
         if (!self.recording) {
             self.currentTick = -1;
             self.playing = true;
@@ -44,17 +47,7 @@ pub const Sequencer = struct {
     pub fn stopRecording(self: *Sequencer) void {
         self.recording = false;
         self.playing = false;
-        // debug
-        var clone = self.recordList.clone() catch return;
-        const sl = clone.toOwnedSlice() catch return;
-        const js = std.json.stringifyAlloc(
-            self.alloc,
-            sl,
-            .{ .whitespace = .indent_2 },
-        ) catch return;
-        std.debug.print("Seq: {s}\n", .{js});
-        self.alloc.free(js);
-        self.alloc.free(sl);
+        self.sort();
     }
     pub fn clearRecording(self: *Sequencer) void {
         if (!self.recording) {
@@ -76,12 +69,30 @@ pub const Sequencer = struct {
     pub fn appendalways(self: *Sequencer, pad: usize, onTick: i64) void {
         self.recordList.append(SequencerEvent{ .timeCode = onTick, .padNumber = pad }) catch return {};
     }
+    pub fn toggle(self: *Sequencer, pad: usize, onTick: i64) void {
+        var found: ?usize = null;
+        for (0..self.recordList.items.len) |i| {
+            const evt = self.recordList.items[i];
+            if (evt.timeCode == onTick and evt.padNumber == pad) {
+                found = i;
+                break;
+            }
+        }
+        if (found == null) {
+            self.recordList.append(SequencerEvent{ .timeCode = onTick, .padNumber = pad }) catch return;
+        } else {
+            _ = self.recordList.orderedRemove(found.?);
+        }
+    }
     pub fn tick(self: *Sequencer) void {
         if (self.playing) {
             self.playForTimeCode(self.currentTick);
         }
         if (self.recording or self.playing) {
             self.currentTick += 1;
+        }
+        if(self.currentTick > settings.ppq * 4 * self.numBars){
+            self.currentTick = 0;
         }
     }
     fn playForTimeCode(self: *Sequencer, timeCode: i64) void {
@@ -115,6 +126,28 @@ pub const Sequencer = struct {
             evt.timeCode = new;
         }
     }
+    fn sort(self: *Sequencer)void{
+        // Sort the content by timecode
+        var x = self.recordList.toOwnedSlice() catch return;
+        std.sort.insertion(SequencerEvent, x, {}, compareSequencerEvent);
+        self.recordList.deinit();
+        self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
+        for (x) |item| {
+            self.recordList.append(item) catch return;
+        }
+
+        // debug
+        // var clone = self.recordList.clone() catch return;
+        // const sl = clone.toOwnedSlice() catch return;
+        // const js = std.json.stringifyAlloc(
+        //     self.alloc,
+        //     sl,
+        //     .{ .whitespace = .indent_2 },
+        // ) catch return;
+        // std.debug.print("Seq: {s}\n", .{js});
+        // self.alloc.free(js);
+        // self.alloc.free(sl);
+    }
 };
 
 pub fn newSequencer(
@@ -123,9 +156,13 @@ pub fn newSequencer(
 ) Sequencer {
     const c: c_int = @divFloor(settings.minute, settings.bpm * settings.ppq);
     tim.startTimer(c, tick_callback);
-    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c };
+    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c,.stepMode=false,.numBars=1 };
     sequencer = this;
     return this;
+}
+
+fn compareSequencerEvent(_: void, lhs: SequencerEvent, rhs: SequencerEvent) bool {
+    return lhs.timeCode < rhs.timeCode;
 }
 
 pub fn saveSequence(seq: *Sequencer) !void {

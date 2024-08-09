@@ -12,10 +12,8 @@ pub const script_path = "./shutdown.sh";
 //Audio
 //pub const coreaudioDefaultDevice: []u8 = @constCast("Externe Kopfhörer");
 pub const coreaudioDefaultDevice: []u8 = @constCast("USB Audio CODEC");
-pub const alsaDefaultDevice: []u8 = @constCast("USB Audio CODEC");
-
-pub const pulseDefaultDevice: []u8 = @constCast("Built-in Audio Digital Stereo (HDMI)");
-pub const defaultDeviceIndex = 1;
+pub const alsaDefaultDevice: []u8 = @constCast("USB Audio CODEC, USB Audio");
+pub const pulseDefaultDevice: []u8 = @constCast("PCM2902 Audio Codec Analog Stereo");
 
 //ui
 pub const gamePadMapping: []u8 = @constCast("15000000010000000500000000010000,mkarcadejoystick GPIO Controller,platform:Linux,a:b1,b:b0,x:b3,y:b2,back:b7,start:b6,leftshoulder:b5,rightshoulder:b4,leftx:a0,lefty:a1,");

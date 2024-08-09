@@ -88,7 +88,7 @@ pub fn main() !void {
             found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
         }
-        if (context.backend == mah.ma_backend_pulseaudio and x == settings.defaultDeviceIndex) {
+        if (context.backend == mah.ma_backend_pulseaudio and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.pulseDefaultDevice)) {
             deviceId = &pPlaybackInfos[x].id;
             found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
@@ -113,6 +113,11 @@ pub fn main() !void {
             deviceIdCapture = &pCaptureInfos[x].id;
             found = true;
             std.debug.print("INFO: selected capture device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
+        }
+        if (context.backend == mah.ma_backend_pulse and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.pulseDefaultDevice)) {
+            deviceIdDefaultCapture = &pCaptureInfos[x].id;
+            found = true;
+            std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
         }
         if (context.backend == mah.ma_backend_alsa and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.alsaDefaultDevice)) {
             deviceIdDefaultCapture = &pCaptureInfos[x].id;

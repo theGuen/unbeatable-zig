@@ -5,8 +5,11 @@ const rcdr = @import("recorder.zig");
 const h = @import("helper.zig");
 const ma = @import("miniaudio.zig");
 const seq = @import("sequencer.zig");
-const mimpl = @import("menuImpl.zig");
+const samplerMenuImpl = @import("menuSamplerImpl.zig");
 const projMenuImpl = @import("menuProjectImpl.zig");
+const fileMenuImpl = @import("menuFileImpl.zig");
+const recorderMenuImpl = @import("menuRecorderImpl.zig");
+const sequncerMenuImpl = @import("menuSequencerImpl.zig");
 
 pub const State = struct {
     selection: i64,
@@ -16,6 +19,17 @@ pub const State = struct {
 };
 pub fn newState() State {
     const stateStr = std.fmt.allocPrint(std.heap.page_allocator, "not implemented ", .{}) catch "";
+    //TODO: 0 termination in 0.11
+    //stateStr[stateStr.len - 1] = 0;
+    return State{
+        .selection = -1,
+        .stateValInt = 0,
+        .stateValFloat = 0,
+        .stateValStr = stateStr,
+    };
+}
+pub fn newStateLabeled(label: []u8) State {
+    const stateStr =std.fmt.allocPrint(std.heap.page_allocator, "{s}", .{label}) catch "";
     //TODO: 0 termination in 0.11
     //stateStr[stateStr.len - 1] = 0;
     return State{
@@ -86,7 +100,7 @@ pub const Menu = struct {
         std.debug.print("Deinit Menu\n", .{});
         for (self.menuItems) |m| {
             std.debug.print("Deinit MenuItem {?}", .{@TypeOf(m)});
-            if (@TypeOf(m) == mimpl.FileMenuItem) {
+            if (@TypeOf(m) == fileMenuImpl.FileMenuItem) {
                 std.debug.print("Deinit Filemenu\n", .{});
                 m.menuValues.deinit();
             } else {
@@ -97,18 +111,20 @@ pub const Menu = struct {
 };
 
 pub fn initMenu(notArena: std.mem.Allocator, alloc: std.mem.Allocator, sampler: *smplr.Sampler, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, otherMenuItems: []ui.MenuItem) !Menu {
-    var samplerMenu = try mimpl.buildSamplerMenu(alloc, sampler);
-    var recorderMenu = try mimpl.buildRecorderMenu(alloc, recorder, sequencer, sampler);
-    var fileMenu = try mimpl.buildFIleMenu(alloc, notArena, sampler);
+    var samplerMenu = try samplerMenuImpl.buildSamplerMenu(alloc, sampler);
+    var recorderMenu = try recorderMenuImpl.buildRecorderMenu(alloc, recorder, sequencer, sampler);
+    var fileMenu = try fileMenuImpl.buildFIleMenu(alloc, notArena, sampler);
     var projectMenu = try projMenuImpl.buildProjectMenu(alloc, recorder, sequencer, sampler);
-    var iMenuItems: []ui.IMenuItem = try alloc.alloc(ui.IMenuItem, otherMenuItems.len + 4);
+    var sequencerMenu = try sequncerMenuImpl.buildSequencerMenu(alloc, recorder, sequencer, sampler);
+    var iMenuItems: []ui.IMenuItem = try alloc.alloc(ui.IMenuItem, otherMenuItems.len + 5);
 
-    iMenuItems[0] = samplerMenu[0].iMenuItem();
-    iMenuItems[1] = recorderMenu[0].iMenuItem();
-    iMenuItems[2] = fileMenu[0].iMenuItem();
-    iMenuItems[3] = projectMenu[0].iMenuItem();
+    iMenuItems[0] = projectMenu[0].iMenuItem();
+    iMenuItems[1] = fileMenu[0].iMenuItem();
+    iMenuItems[2] = samplerMenu[0].iMenuItem();
+    iMenuItems[3] = sequencerMenu[0].iMenuItem();
+    iMenuItems[4] = recorderMenu[0].iMenuItem();
 
-    for (otherMenuItems, 0..) |*omi, i| iMenuItems[i + 4] = omi.iMenuItem();
+    for (otherMenuItems, 0..) |*omi, i| iMenuItems[i + 5] = omi.iMenuItem();
     var menu: Menu = undefined;
     menu.alloc = alloc;
     menu._currentIndex = 0;

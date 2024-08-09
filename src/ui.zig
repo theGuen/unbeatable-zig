@@ -3,7 +3,6 @@ const assert = std.debug.assert;
 
 const ray = @cImport(@cInclude("raylibwrapper.h"));
 const mn = @import("menu.zig");
-const mnImpl = @import("menuImpl.zig");
 const smplr = @import("sampler.zig");
 const helper = @import("helper.zig");
 const seq = @import("sequencer.zig");
@@ -13,7 +12,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     const screenWidth = 800;
     const screenHeight = 480;
     const maxDispSamples = 44100 * 5;
-    var smplDisp: [430]c_int = undefined;
+    var smplDisp: [780]c_int = undefined;
 
     _ = ray.SetGamepadMappings(@ptrCast(settings.gamePadMapping));
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
@@ -22,9 +21,9 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     const cols = 4;
     var buttons: [cols * 4]ray.Rectangle = undefined;
     for (&buttons, 0..) |*b, i| {
-        const ix = @as(f32, @floatFromInt(10 + (i % cols) * 10 + (i % cols) * 100));
-        const iy = @as(f32, @floatFromInt(120 + (i / cols) * 10 + (i / cols) * 70));
-        b.* = ray.Rectangle{ .x = ix, .y = iy, .width = 100, .height = 70 };
+        const ix = @as(f32, @floatFromInt(10 + (i % cols) * 10 + (i % cols) * 50));
+        const iy = @as(f32, @floatFromInt(220 + (i / cols) * 10 + (i / cols) * 50));
+        b.* = ray.Rectangle{ .x = ix, .y = iy, .width = 50, .height = 50 };
     }
 
     var btn_colors: [cols * 4]ray.Color = undefined;
@@ -56,7 +55,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         var cm: f64 = 0;
         if (sbuf.len > 0 and showSample) {
             const smplCount = @min(sbuf[0].len, maxDispSamples);
-            const scale = smplCount / 430;
+            const scale = smplCount / 780;
             const realPos = samplers.sounds[currentPad].posf;
 
             const realStart = @as(usize, @intFromFloat(samplers.sounds[currentPad].start));
@@ -84,7 +83,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
                     const r = std.math.fabs(sbuf[1][j]);
                     val = @max((l + r), val);
                 }
-                y.* = @intFromFloat(@min(val * 25, 25));
+                y.* = @intFromFloat(@min(val * 50, 50));
             }
         } else {
             for (&smplDisp) |*y| y.* = 0;
@@ -136,28 +135,32 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         const r: usize = @intCast(samplers.row);
         if (but_a) {
-            samplers.play(0 + (4 * r), true);
-            sequencer.appendToRecord(0 + (4 * r));
+            currentPad = padPressed(0,r,samplers,sequencer,&btn_colors);
         }
-        if (but_a_rel) samplers.stop(0 + (4 * r));
+        if (but_a_rel){
+            _ = padRelease(0,r,samplers,sequencer,&btn_colors);
+        }
 
         if (but_b) {
-            samplers.play(1 + (4 * r), true);
-            sequencer.appendToRecord(1 + (4 * r));
+            currentPad = padPressed(1,r,samplers,sequencer,&btn_colors);
         }
-        if (but_b_rel) samplers.stop(1 + (4 * r));
+        if (but_b_rel) {
+            _ = padRelease(1,r,samplers,sequencer,&btn_colors);
+        }
 
         if (but_x) {
-            samplers.play(2 + (4 * r), true);
-            sequencer.appendToRecord(2 + (4 * r));
+            currentPad = padPressed(2,r,samplers,sequencer,&btn_colors);
         }
-        if (but_x_rel) samplers.stop(2 + (4 * r));
+        if (but_x_rel) {
+            _ = padRelease(2,r,samplers,sequencer,&btn_colors);
+        }
 
         if (but_y) {
-            samplers.play(3 + (4 * r), true);
-            sequencer.appendToRecord(3 + (4 * r));
+            currentPad = padPressed(3,r,samplers,sequencer,&btn_colors);
         }
-        if (but_y_rel) samplers.stop(3 + (4 * r));
+        if (but_y_rel) {
+            _ = padRelease(3,r,samplers,sequencer,&btn_colors);
+        }
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
             _ = menu.prev();
@@ -193,18 +196,10 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         for (keys, 0..) |k, i| {
             if (ray.IsKeyPressed(k)) {
-                if (sequencer.prepared) {
-                    _ = sequencer.startRecording();
-                    sequencer.prepared = false;
-                }
-                samplers.play(i + (4 * r), true);
-                btn_colors[i + (4 * r)] = ray.ORANGE;
-                currentPad = i + (4 * r);
-                sequencer.appendToRecord(currentPad);
+                currentPad = padPressed(i,r,samplers,sequencer,&btn_colors);
             }
             if (ray.IsKeyReleased(k)) {
-                samplers.stop(i + (4 * r));
-                btn_colors[i + (4 * r)] = ray.GREEN;
+                _ = padRelease(i,r,samplers,sequencer,&btn_colors);
             }
         }
         //--------------------------------------------------------------------------------------------------------------------------
@@ -213,23 +208,22 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW WAV Display
         ray.ClearBackground(ray.BLACK);
-        //ray.DrawRectangle(10, 4, 430, 50, ray.GRAY);
-        ray.DrawRectangleLines(10, 4, 430, 50, ray.WHITE);
+        ray.DrawRectangleLines(10, 4, 780, 100, ray.WHITE);
 
         for (smplDisp, 0..) |y, x| {
             if (x < sm or x > em) {
-                ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.DARKGRAY);
+                ray.DrawLine(@intCast(x + 10), 58 + y, @intCast(x + 10), 58 - y, ray.DARKGRAY);
             } else {
-                ray.DrawLine(@intCast(x + 10), 29 + y, @intCast(x + 10), 29 - y, ray.WHITE);
+                ray.DrawLine(@intCast(x + 10), 58 + y, @intCast(x + 10), 58 - y, ray.WHITE);
             }
         }
 
         const sm_c = @as(c_int, @intCast(sm));
         const em_c = @as(c_int, @intCast(em));
         const ph = @as(c_int, @intFromFloat(cm));
-        ray.DrawLine(10 + ph, 4, 10 + ph, 54, ray.RED);
-        ray.DrawLine(10 + sm_c, 4, 10 + sm_c, 54, ray.ORANGE);
-        ray.DrawLine(10 + em_c, 4, 10 + em_c, 54, ray.ORANGE);
+        ray.DrawLine(10 + ph, 4, 10 + ph, 104, ray.RED);
+        ray.DrawLine(10 + sm_c, 4, 10 + sm_c, 104, ray.ORANGE);
+        ray.DrawLine(10 + em_c, 4, 10 + em_c, 104, ray.ORANGE);
 
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW MENU Display
@@ -237,19 +231,19 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const mText = menu.current();
         const concatenated = try helper.SubString(std.heap.page_allocator, @constCast(mText), 30);
         defer std.heap.page_allocator.free(concatenated);
-        ray.DrawRectangleLines(10, 65, 430, 47, ray.WHITE);
-        ray.DrawText(padString, 12, 70, 13, ray.WHITE);
-        ray.DrawText(@ptrCast(@constCast(concatenated)), 12, 85, 25, ray.WHITE);
+        ray.DrawRectangleLines(10, 115, 780, 96, ray.WHITE);
+        ray.DrawText(padString, 12, 125, 20, ray.WHITE);
+        ray.DrawText(@ptrCast(@constCast(concatenated)), 12, 155, 45, ray.WHITE);
         if (joyStickDetected) {
-            ray.DrawCircle(430, 75, 5, ray.GREEN);
+            ray.DrawCircle(780, 125, 5, ray.GREEN);
         } else {
-            ray.DrawCircle(430, 75, 5, ray.RED);
+            ray.DrawCircle(780, 125, 5, ray.RED);
         }
 
         if (sequencer.recording) {
-            ray.DrawCircle(450, 75, 5, ray.RED);
+            ray.DrawCircle(780, 145, 5, ray.RED);
         } else {
-            ray.DrawCircle(450, 75, 5, ray.GREEN);
+            ray.DrawCircle(780, 145, 5, ray.GREEN);
         }
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW Buttons
@@ -259,18 +253,36 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         // DRAW Active Buttons (Gamepi)
         const i: c_int = @intCast(r);
         const ix = @as(c_int, 5);
-        const iy = 115 + i * 10 + i * 70;
-        ray.DrawRectangleLines(ix, iy, 440, 80, ray.RED);
+        const iy = 215 + i * 10 + i * 50;
+        ray.DrawRectangleLines(ix, iy, 240, 60, ray.RED);
         //--------------------------------------------------------------------------------------------------------------------------
-        for (0..16) |x| {
-            const seqstep = std.fmt.allocPrint(std.heap.page_allocator, "{d:0>2} 00 00 00", .{x}) catch "";
-            defer std.heap.page_allocator.free(seqstep);
-            const seqstepStr = @as([*c]u8, @constCast(@ptrCast(seqstep)));
-            ray.DrawText(seqstepStr, 470, @intCast(40 + x * 25), 25, ray.WHITE);
-        }
     }
 }
 
+pub fn padPressed(i:usize,r:usize,samplers: *smplr.Sampler,sequencer: *seq.Sequencer,btn_colors: []ray.Color)usize{
+    var currentPad = i + (4 * r);
+    btn_colors[currentPad] = ray.ORANGE;
+    if(!sequencer.stepMode){
+        if (sequencer.prepared) {
+            _ = sequencer.startRecording();
+            sequencer.prepared = false;
+        }
+        samplers.play(currentPad, true);
+        sequencer.appendToRecord(currentPad);
+    }else{
+        btn_colors[currentPad] = ray.RED;
+        sequencer.toggle(samplers.selectedSound,@intCast(currentPad * (settings.ppq/4)));
+    }
+    return currentPad;
+}
+
+pub fn padRelease(i:usize,r:usize,samplers: *smplr.Sampler,sequencer: *seq.Sequencer,btn_colors: []ray.Color)usize{
+    _ = sequencer;
+    var currentPad = i + (4 * r);
+    samplers.stop(currentPad);
+    btn_colors[currentPad] = ray.GREEN;
+    return currentPad;
+}
 pub const ButtonState = struct {
     up: bool,
     down: bool,
