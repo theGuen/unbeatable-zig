@@ -46,6 +46,7 @@ pub fn main() !void {
     const fxMenuItems = try ma.init(alloc, arenaAlloc, mix, &recorder);
 
     _ = seq.newSequencer(arenaAlloc, &sampler);
+    seq.loadSequence(&seq.sequencer, alloc, @constCast("project1.asd")) catch return {};
 
     var menu: mn.Menu = try mn.initMenu(alloc, arenaAlloc, &sampler, &recorder, &seq.sequencer, fxMenuItems);
     defer menu.deinit();
@@ -60,7 +61,7 @@ pub fn main() !void {
     var pCaptureInfos: [*c]mah.ma_device_info = undefined;
     var captureCount: mah.ma_uint32 = 0;
 
-    var backends = [4]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_pulseaudio, mah.ma_backend_alsa, mah.ma_backend_jack };
+    var backends = [4]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_jack, mah.ma_backend_alsa, mah.ma_backend_pulseaudio };
     const cba = @as([*c]c_uint, @constCast(&backends));
     if (mah.ma_context_init(cba, 4, &ctxConfig, &context) != mah.MA_SUCCESS) {
         std.debug.print("ERROR: ma_context_init failed", .{});
@@ -92,6 +93,11 @@ pub fn main() !void {
             found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
         }
+        if (context.backend == mah.ma_backend_alsa and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.alsaDefaultDevice)) {
+            deviceId = &pPlaybackInfos[x].id;
+            found = true;
+            std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
+        }
         if (pPlaybackInfos[x].isDefault == 1) {
             deviceIdDefault = &pPlaybackInfos[x].id;
             std.debug.print("INFO: default device : {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
@@ -103,14 +109,19 @@ pub fn main() !void {
     }
     found = false;
     for (0..captureCount) |x| {
-        if (context.backend == mah.ma_backend_coreaudio and std.mem.startsWith(u8, &pPlaybackInfos[x].name, settings.coreaudioDefaultDevice)) {
+        if (context.backend == mah.ma_backend_coreaudio and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.coreaudioDefaultDevice)) {
             deviceIdCapture = &pCaptureInfos[x].id;
             found = true;
-            std.debug.print("INFO: selected capture device : {d}, {s}\n\n", .{ x, pPlaybackInfos[x].name });
+            std.debug.print("INFO: selected capture device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
+        }
+        if (context.backend == mah.ma_backend_alsa and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.alsaDefaultDevice)) {
+            deviceIdDefaultCapture = &pCaptureInfos[x].id;
+            found = true;
+            std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
         }
         if (pCaptureInfos[x].isDefault == 1) {
             deviceIdDefaultCapture = &pCaptureInfos[x].id;
-            std.debug.print("INFO: default capture device : {d}, {s}\n", .{ x, pPlaybackInfos[x].name });
+            std.debug.print("INFO: default capture device : {d}, {s}\n", .{ x, pCaptureInfos[x].name });
         }
     }
     if (!found) {
