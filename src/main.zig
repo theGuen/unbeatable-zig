@@ -114,7 +114,7 @@ pub fn main() !void {
             found = true;
             std.debug.print("INFO: selected capture device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
         }
-        if (context.backend == mah.ma_backend_pulse and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.pulseDefaultDevice)) {
+        if (context.backend == mah.ma_backend_pulseaudio and std.mem.startsWith(u8, &pCaptureInfos[x].name, settings.pulseDefaultDevice)) {
             deviceIdDefaultCapture = &pCaptureInfos[x].id;
             found = true;
             std.debug.print("INFO: selected device : {d}, {s}\n\n", .{ x, pCaptureInfos[x].name });
@@ -141,12 +141,14 @@ pub fn main() !void {
     deviceConfig.playback.format = mah.ma_format_f32;
     deviceConfig.playback.channels = 2;
 
-    deviceConfig.capture.pDeviceID = @constCast(deviceIdCapture);
-    deviceConfig.capture.format = mah.ma_format_f32;
-    deviceConfig.capture.channels = 2;
-    deviceConfig.capture.shareMode = mah.ma_share_mode_shared;
+    if (context.backend != mah.ma_backend_alsa){
+        deviceConfig.capture.pDeviceID = @constCast(deviceIdCapture);
+        deviceConfig.capture.format = mah.ma_format_f32;
+        deviceConfig.capture.channels = 2;
+        deviceConfig.capture.shareMode = mah.ma_share_mode_shared;
+    }
 
-    deviceConfig.sampleRate = 44100;
+    deviceConfig.sampleRate = 48000;
     deviceConfig.dataCallback = ma.audio_callback;
     deviceConfig.pUserData = null;
     var r = mah.ma_device_init(&context, &deviceConfig, &device);

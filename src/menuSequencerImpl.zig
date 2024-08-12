@@ -38,20 +38,43 @@ fn currentplayseq(self: *StepSequencerValue) [*c]const u8 {
 }
 
 fn upRow(self: *StepSequencerValue) void {
-    if (self.sampler.row > 0) {
-        self.sampler.row -= 1;
-        std.heap.page_allocator.free(self.state.stateValStr);
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sampler.row }) catch "";
+    
+    if (self.sequencer.curBar < 1){
+        self.sequencer.curBar  = 15 + self.sequencer.curBar;
+    }else{
+        self.sequencer.curBar -= 1;
     }
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sequencer.curBar }) catch "";
 }
 fn downRow(self: *StepSequencerValue) void {
-    if (self.sampler.row < 3) {
-        self.sampler.row += 1;
-        std.heap.page_allocator.free(self.state.stateValStr);
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sampler.row }) catch "";
+    self.sequencer.curBar += 1;
+    if (self.sequencer.curBar > 15){
+        self.sequencer.curBar= self.sequencer.curBar - 16;
     }
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sequencer.curBar }) catch "";
 }
 fn currentRow(self: *StepSequencerValue) [*c]const u8 {
+    return @ptrCast(self.state.stateValStr);
+}
+
+fn upBars(self: *StepSequencerValue) void {
+    self.sequencer.numBars += 1;
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sequencer.numBars }) catch "";
+}
+fn downBars(self: *StepSequencerValue) void {
+    if (self.sequencer.numBars >= 2){
+        self.sequencer.numBars -= 1;
+    }
+
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sequencer.numBars }) catch "";
+}
+fn currentBars(self: *StepSequencerValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sequencer.numBars }) catch "";
     return @ptrCast(self.state.stateValStr);
 }
 
@@ -165,12 +188,12 @@ pub const StepSequencerMenuItem = struct {
 
 pub fn buildSequencerMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, sampler: *smplr.Sampler) ![]StepSequencerMenuItem {
     var menuItem: []StepSequencerMenuItem = try alloc.alloc(StepSequencerMenuItem, 1);
-    var menuValues: []StepSequencerValue = try alloc.alloc(StepSequencerValue, 3);
+    var menuValues: []StepSequencerValue = try alloc.alloc(StepSequencerValue, 4);
     menuValues[0] = StepSequencerValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "StepSequnce", .increment = upstepMode, .decrement = downstepMode, .current = currentstepMode, .loaded = false, .state = menu.newStateLabeled(@constCast("stepMode off")) };
 
     menuValues[1] = StepSequencerValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "play sequence", .increment = upplayseq, .decrement = downplayseq, .current = currentplayseq, .loaded = false, .state = menu.newStateLabeled(@constCast("play sequence")) };
-
-    menuValues[2] = StepSequencerValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "Row", .increment = upRow, .decrement = downRow, .current = currentRow, .loaded = false, .state =menu.newStateLabeled(@constCast("row")) };
+    menuValues[2] = StepSequencerValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "max. Bars", .increment = upBars, .decrement = downBars, .current = currentBars, .loaded = false, .state =menu.newStateLabeled(@constCast("max. Bars")) };
+    menuValues[3] = StepSequencerValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "Quarter", .increment = upRow, .decrement = downRow, .current = currentRow, .loaded = false, .state =menu.newStateLabeled(@constCast("Quarter 0")) };
 
     menuItem[0].label = "Sequence";
     menuItem[0].active = false;

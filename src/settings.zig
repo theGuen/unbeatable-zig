@@ -13,6 +13,10 @@ pub const script_path = "./shutdown.sh";
 //pub const coreaudioDefaultDevice: []u8 = @constCast("Externe Kopfhörer");
 pub const coreaudioDefaultDevice: []u8 = @constCast("USB Audio CODEC");
 pub const alsaDefaultDevice: []u8 = @constCast("USB Audio CODEC, USB Audio");
+//Playing WAVE 'bd.wav' : Signed 24 bit Little Endian in 3bytes, Rate 48000 Hz, Stereo
+//aplay: set_params:1343: Sample format non available
+//Available formats:
+//- IEC958_SUBFRAME_LE
 pub const pulseDefaultDevice: []u8 = @constCast("PCM2902 Audio Codec Analog Stereo");
 
 //ui

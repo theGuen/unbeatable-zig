@@ -10,10 +10,38 @@ fn tick_callback(b: c_int) callconv(.C) void {
     sequencer.tick();
 }
 
+const EventType = enum {
+    note_on,
+    note_off,
+    cc_evt,
+};
+
 pub const SequencerEvent = struct {
     timeCode: i64,
     padNumber: usize,
+    //Not used right now
+    eventType: EventType,
+    length:i64,
+    gated:bool,
+    pitch: f32,
+    semis: i64,
+    pan: f32,
+    cc_val: usize
 };
+
+pub fn NewSequencerEvent(timeCode: i64,padNumber: usize,eventType: EventType)SequencerEvent {
+    return SequencerEvent{ 
+        .timeCode = timeCode,
+        .padNumber = padNumber,
+        .eventType = eventType,
+        .length = settings.ppq*4,
+        .gated = false,
+        .pitch = 0,
+        .semis = 0,
+        .pan = 0.5,
+        .cc_val = 0
+    };
+}
 
 pub const Sequencer = struct {
     alloc: std.mem.Allocator,
@@ -26,6 +54,7 @@ pub const Sequencer = struct {
     micros: c_int,
     stepMode: bool,
     numBars: usize,
+    curBar: usize,
     pub fn startRecording(self: *Sequencer) void {
         if (!self.recording) {
             self.recording = true;
@@ -63,25 +92,30 @@ pub const Sequencer = struct {
     }
     pub fn appendToRecord(self: *Sequencer, pad: usize) void {
         if (self.recording) {
-            self.recordList.append(SequencerEvent{ .timeCode = self.currentTick, .padNumber = pad }) catch return {};
+            self.recordList.append(NewSequencerEvent( self.currentTick, pad, EventType.note_on )) catch return {};
         }
     }
     pub fn appendalways(self: *Sequencer, pad: usize, onTick: i64) void {
-        self.recordList.append(SequencerEvent{ .timeCode = onTick, .padNumber = pad }) catch return {};
+        self.recordList.append(NewSequencerEvent(onTick, pad, EventType.note_on )) catch return {};
     }
     pub fn toggle(self: *Sequencer, pad: usize, onTick: i64) void {
         var found: ?usize = null;
         for (0..self.recordList.items.len) |i| {
             const evt = self.recordList.items[i];
-            if (evt.timeCode == onTick and evt.padNumber == pad) {
+            const tmp = @divTrunc(evt.timeCode,(settings.ppq/4))*(settings.ppq/4);
+            if (tmp == onTick and evt.padNumber == pad) {
                 found = i;
                 break;
             }
         }
         if (found == null) {
-            self.recordList.append(SequencerEvent{ .timeCode = onTick, .padNumber = pad }) catch return;
+            self.recordList.append(NewSequencerEvent(onTick, pad, EventType.note_on )) catch return;
         } else {
             _ = self.recordList.orderedRemove(found.?);
+        }
+        if(onTick >= self.numBars*settings.ppq*4){
+            const tmp: usize = self.numBars*@as(usize,settings.ppq*4);
+            self.numBars = @as(usize,@intCast(onTick))/tmp+1;
         }
     }
     pub fn tick(self: *Sequencer) void {
@@ -148,6 +182,19 @@ pub const Sequencer = struct {
         // self.alloc.free(js);
         // self.alloc.free(sl);
     }
+    pub fn sixteenth(self: *Sequencer, pad: usize,cur_row: usize)[16]bool{
+        var retval = [16]bool{false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false};
+        for (self.recordList.items) |*evt| {
+            var pps = (settings.ppq / 4);
+            
+            const index:usize = @intCast(@divFloor(evt.timeCode , pps));
+            var bar = cur_row/4;
+            if (evt.padNumber == pad and index >= bar * 16 and index < (bar+1) * 16) {
+            retval[index - (bar*16)]=true; 
+            }
+        }
+        return retval;
+    }
 };
 
 pub fn newSequencer(
@@ -156,7 +203,7 @@ pub fn newSequencer(
 ) Sequencer {
     const c: c_int = @divFloor(settings.minute, settings.bpm * settings.ppq);
     tim.startTimer(c, tick_callback);
-    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c,.stepMode=false,.numBars=1 };
+    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c,.stepMode=false,.numBars=1,.curBar=0 };
     sequencer = this;
     return this;
 }
@@ -193,6 +240,10 @@ pub fn loadSequence(seq: *Sequencer, alloc: std.mem.Allocator, projectName: []u8
     seq.clearRecording();
     const newOne = parsed.value;
     for (newOne) |entry| {
-        seq.recordList.append(SequencerEvent{ .timeCode = entry.timeCode, .padNumber = entry.padNumber }) catch return {};
+        seq.recordList.append(NewSequencerEvent( entry.timeCode, entry.padNumber, EventType.note_on )) catch return {};
+        if(entry.timeCode >= seq.numBars*settings.ppq*4){
+            const oneBar: usize = @as(usize,settings.ppq*4);
+            seq.numBars = @as(usize,@intCast(entry.timeCode))/oneBar+1;
+        }
     }
 }
