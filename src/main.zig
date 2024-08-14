@@ -61,7 +61,9 @@ pub fn main() !void {
     var pCaptureInfos: [*c]mah.ma_device_info = undefined;
     var captureCount: mah.ma_uint32 = 0;
 
-    var backends = [4]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_jack, mah.ma_backend_alsa, mah.ma_backend_pulseaudio };
+    //var backends = [4]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_jack, mah.ma_backend_alsa, mah.ma_backend_pulseaudio };
+    // with pipewire pulse works like a charme
+    var backends = [3]mah.ma_backend{ mah.ma_backend_coreaudio, mah.ma_backend_jack, mah.ma_backend_pulseaudio };
     const cba = @as([*c]c_uint, @constCast(&backends));
     if (mah.ma_context_init(cba, 4, &ctxConfig, &context) != mah.MA_SUCCESS) {
         std.debug.print("ERROR: ma_context_init failed", .{});
@@ -182,7 +184,7 @@ pub fn main() !void {
 
     const argv = [_][]const u8{ "/bin/sh", settings.script_path };
     std.debug.print("INFO: {s}\n", .{argv});
-    const proc = try std.ChildProcess.exec(.{
+    const proc = try std.process.Child.run(.{
         .allocator = alloc,
         .argv = &argv,
     });

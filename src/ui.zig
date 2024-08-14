@@ -87,8 +87,8 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
                 const from = @min(sbuf[0].len, offset + i * scale);
                 const to = @min(sbuf[0].len, offset + i * scale + scale);
                 for (sbuf[0][from..to], 0..) |d, j| {
-                    const l = std.math.fabs(d);
-                    const r = std.math.fabs(sbuf[1][j]);
+                    const l = @abs(d);
+                    const r = @abs(sbuf[1][j]);
                     val = @max((l + r), val);
                 }
                 y.* = @intFromFloat(@min(val * 50, 50));
@@ -129,7 +129,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             cur_row = @intCast(sequencer.curBar);
         }
         //CALC_SEQ
-        var sixteenth = sequencer.sixteenth(samplers.selectedSound,cur_row);
+        const sixteenth = sequencer.sixteenth(samplers.selectedSound,cur_row);
         for (0..sixteenth.len)|x|{
             if(sixteenth[x]){
                 btn_colors[x] = ray.ORANGE;

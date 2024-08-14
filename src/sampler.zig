@@ -13,7 +13,7 @@ pub const Sampler = struct {
         self.selectedSound = padNum;
         var sound: *Sound = &self.sounds[self.selectedSound];
         //seems whe have to free the pointer last....
-        var b = sound.buffer;
+        const b = sound.buffer;
         sound.buffer = sample;
         sound.gain = 0.9;
         sound.posf = 0;
@@ -289,7 +289,7 @@ const SoundL = struct {
 
 fn pitchSemis(pitch: i64) f32 {
     const pitchstep = 1.05946;
-    const abs: u64 = math.absCast(pitch);
+    const abs: u64 = @abs(pitch);
     var oct = abs / 12;
     const semi = abs - (12 * oct);
     oct += 1;
@@ -316,7 +316,9 @@ pub fn loadDefaultSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler) !v
     loadSamplerConfig(alloc, samplers, projectName) catch {};
 }
 pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler, projectName: []u8) !void {
-    const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
+    //const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
+    const dirinit = std.fs.cwd().openDir(projectName, .{}) catch return {};
+    var dir = dirinit.iterate();
     var rfile = dir.dir.openFile("sampler_config.json", .{}) catch return {};
     const body_content = try rfile.readToEndAlloc(alloc, std.math.maxInt(usize));
     defer alloc.free(body_content);
@@ -383,7 +385,9 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
     }
 
     std.fs.cwd().makeDir(settings.currentProj) catch {};
-    const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
+    //const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
+    const dirinit = std.fs.cwd().openDir(settings.currentProj, .{}) catch return {};
+    var dir = dirinit.iterate();
     var file = try dir.dir.createFile("sampler_config.json", .{});
     defer file.close();
     const fw = file.writer();

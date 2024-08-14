@@ -19,15 +19,15 @@ pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocat
     fx = mfx.newmydsp();
     mfx.initmydsp(fx, 44100);
 
-    var uiGlue = try ui.newUIGlue();
-    var uiGlue_c = @as([*c]mfx.UIGlue, @ptrCast(uiGlue));
+    const uiGlue = try ui.newUIGlue();
+    const uiGlue_c = @as([*c]mfx.UIGlue, @ptrCast(uiGlue));
     mfx.buildUserInterfacemydsp(fx, uiGlue_c);
-    var items = try ui.MenuItemsFromUIGlue(aMenuAllocator, uiGlue);
+    const items = try ui.MenuItemsFromUIGlue(aMenuAllocator, uiGlue);
     return items;
 }
 
 pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
-    var buffer = @as([*c]f32, @ptrCast(@alignCast(myBuffer)));
+    const buffer = @as([*c]f32, @ptrCast(@alignCast(myBuffer)));
     var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
     var encoder = std.mem.zeroes(ma.ma_encoder);
     var r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
@@ -44,7 +44,7 @@ pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
 pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !void {
     var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
     var encoder = std.mem.zeroes(ma.ma_encoder);
-    var r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
+    const r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
     defer ma.ma_encoder_uninit(&encoder);
     if (r != ma.MA_SUCCESS) {
         std.debug.print("Could not init encoder {s}: {d}\n", .{ inFileName, r });
@@ -52,7 +52,7 @@ pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !voi
     }
     var pFramesWritten: usize = 0;
     for (list.items) |buf| {
-        var buffer = @as([*c]f32, @ptrCast(@alignCast(buf)));
+        const buffer = @as([*c]f32, @ptrCast(@alignCast(buf)));
         _ = ma.ma_encoder_write_pcm_frames(&encoder, buffer, buf.len / 2, &pFramesWritten);
         allocator.free(buf);
     }
@@ -122,8 +122,8 @@ pub fn audio_callback(mydevice: ?*ma.ma_device,out: ?*anyopaque,input: ?*const a
     }
 
     // Apply Faust DSP
-    var cc2: c_int = @intCast(frame_count);
-    var outm: [*c][*c]f32 = @ptrCast(@alignCast(mixBuffer));
+    const cc2: c_int = @intCast(frame_count);
+    const outm: [*c][*c]f32 = @ptrCast(@alignCast(mixBuffer));
     mfx.computemydsp(fx, cc2, outm, outm);
 
     // Allocate rb for recording

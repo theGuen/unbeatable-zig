@@ -152,7 +152,7 @@ pub const Sequencer = struct {
                 evt.timeCode = 0;
                 continue;
             }
-            var x = @divFloor(evt.timeCode, settings.ppq / 4);
+            const x = @divFloor(evt.timeCode, settings.ppq / 4);
             var new = x * (settings.ppq / 4);
             if (evt.timeCode - new > settings.ppq / 8) {
                 new = (x + 1) * (settings.ppq / 4);
@@ -162,7 +162,7 @@ pub const Sequencer = struct {
     }
     fn sort(self: *Sequencer)void{
         // Sort the content by timecode
-        var x = self.recordList.toOwnedSlice() catch return;
+        const x = self.recordList.toOwnedSlice() catch return;
         std.sort.insertion(SequencerEvent, x, {}, compareSequencerEvent);
         self.recordList.deinit();
         self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
@@ -185,10 +185,10 @@ pub const Sequencer = struct {
     pub fn sixteenth(self: *Sequencer, pad: usize,cur_row: usize)[16]bool{
         var retval = [16]bool{false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false};
         for (self.recordList.items) |*evt| {
-            var pps = (settings.ppq / 4);
+            const pps = (settings.ppq / 4);
             
             const index:usize = @intCast(@divFloor(evt.timeCode , pps));
-            var bar = cur_row/4;
+            const bar = cur_row/4;
             if (evt.padNumber == pad and index >= bar * 16 and index < (bar+1) * 16) {
             retval[index - (bar*16)]=true; 
             }
@@ -214,7 +214,9 @@ fn compareSequencerEvent(_: void, lhs: SequencerEvent, rhs: SequencerEvent) bool
 
 pub fn saveSequence(seq: *Sequencer) !void {
     std.fs.cwd().makeDir(settings.currentProj) catch {};
-    const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
+    //const dir = try std.fs.cwd().openIterableDir(settings.currentProj, .{});
+    const dirinit = std.fs.cwd().openDir(settings.currentProj, .{}) catch return {};
+    var dir = dirinit.iterate();
     var file = try dir.dir.createFile("sequence.json", .{});
     defer file.close();
     const fw = file.writer();
@@ -226,7 +228,9 @@ pub fn saveSequence(seq: *Sequencer) !void {
 
 pub fn loadSequence(seq: *Sequencer, alloc: std.mem.Allocator, projectName: []u8) !void {
     std.debug.print("INFO: loading sequence\n", .{});
-    const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
+    //const dir = std.fs.cwd().openIterableDir(projectName, .{}) catch return {};
+    const dirinit = std.fs.cwd().openDir(projectName, .{}) catch return {};
+    var dir = dirinit.iterate();
     var rfile = dir.dir.openFile("sequence.json", .{}) catch return {};
     const body_content = try rfile.readToEndAlloc(alloc, std.math.maxInt(usize));
 

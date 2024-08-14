@@ -7,6 +7,7 @@ const ma = @import("miniaudio.zig");
 const seq = @import("sequencer.zig");
 const mn = @import("menu.zig");
 const settings = @import("settings.zig");
+//const sndf = @import("sndfile.zig");
 
 pub const FileMenuItem = struct {
     label: [*c]const u8,
@@ -47,7 +48,7 @@ pub const FileMenuItem = struct {
             var asd = self.alloc.alloc(u8, 5) catch return {};
             defer self.alloc.free(asd);
             std.debug.print("dir is {s}\n", .{item.name});
-            std.mem.copy(u8, asd[0..4], ".asd"[0..4]);
+            @memcpy(asd[0..4], ".asd"[0..4]);
             asd[4] = 0;
             if (h.StringHasSuffix(item.name, asd)) {
                 std.debug.print("loading: project {s}\n", .{item.name});
@@ -57,7 +58,7 @@ pub const FileMenuItem = struct {
                 smplr.loadSamplerConfig(self.alloc, self.sampler, @constCast(dirName)) catch {};
                 seq.loadSequence(&seq.sequencer, self.alloc, @constCast(dirName)) catch return {};
                 self.valueStr = self.alloc.alloc(u8, 7) catch return {};
-                std.mem.copy(u8, self.valueStr[0..6], "loaded"[0..6]);
+                @memcpy(self.valueStr[0..6], "loaded"[0..6]);
                 self.valueStr[6] = 0;
             } else {
                 const parentDir = h.StringConcat(self.alloc, item.path, item.name) catch return {};
@@ -65,7 +66,7 @@ pub const FileMenuItem = struct {
                 const mnv = h.readDirectory(self.alloc, parentDir) catch return {};
                 if (mnv.items.len == 0) {
                     self.valueStr = self.alloc.alloc(u8, 6) catch return {};
-                    std.mem.copy(u8, self.valueStr[0..5], "3mpty"[0..5]);
+                    @memcpy(self.valueStr[0..5], "3mpty"[0..5]);
                     self.valueStr[5] = 0;
                     return;
                 }

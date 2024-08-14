@@ -35,6 +35,6 @@ pub const Recorder = struct {
 };
 
 pub fn newRecorder(alloc: std.mem.Allocator) Recorder {
-    var this = Recorder{ .alloc = alloc, .recordList = undefined, .recording = false, .lineIn = false };
+    const this = Recorder{ .alloc = alloc, .recordList = undefined, .recording = false, .lineIn = false };
     return this;
 }

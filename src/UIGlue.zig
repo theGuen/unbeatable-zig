@@ -113,9 +113,9 @@ pub const ItemGroup = extern struct {
 pub const GroupHolder = extern struct { label: [*c]const u8, openBoxes: usize, count: usize, items: [16]ItemGroup };
 
 pub fn MenuItemsFromUIGlue(alloc: std.mem.Allocator, uiGlue: *UIGlue) ![]MenuItem {
-    var tmp:*GroupHolder = @ptrCast(@alignCast(uiGlue.*.uiInterface));
+    const tmp:*GroupHolder = @ptrCast(@alignCast(uiGlue.*.uiInterface));
     const gCount = tmp.count;
-    var items: []MenuItem = try alloc.alloc(MenuItem, gCount);
+    const items: []MenuItem = try alloc.alloc(MenuItem, gCount);
     for (items,0..) |*item, i| {
         item.label = tmp.items[i].label;
         item.valueStr = "";
@@ -236,7 +236,7 @@ pub const MenuItem = struct {
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        const self:*MenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
 };

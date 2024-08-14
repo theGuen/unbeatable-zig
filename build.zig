@@ -6,7 +6,7 @@ const targets: []const std.zig.CrossTarget = &.{
     .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu, .glibc_version = 2.31 },
 };
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -19,39 +19,49 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const exe = b.addExecutable(.{
         .name = "unbeatable",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     // const default_build = [_][]const u8{"-std=c99"};
     const default_build = [_][]const u8{"-std=gnu99"};
-    exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
-    switch (exe.target.toTarget().os.tag) {
+    //exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
+    switch (target.result.os.tag) {
         .macos => {
-            exe.addIncludePath(.{ .path = "/opt/homebrew/include" });
-            exe.addLibraryPath(.{ .path = "/opt/homebrew/lib" });
+            std.debug.print("Buildning MACOS\n", .{});
+            exe.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            exe.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             exe.linkSystemLibrary("raylib");
+            exe.linkSystemLibrary("sndfile");
             //exe.addIncludePath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/include" });
             //exe.addLibraryPath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/lib" });
             //exe.linkSystemLibraryName("raylib");
         },
         .linux => {
-            exe.addIncludePath(.{ .path = "lib/linux/include" });
-            exe.addLibraryPath(.{ .path = "lib/linux/lib" });
-            exe.linkSystemLibraryName("raylib");
+            std.debug.print("Buildning LINUX\n", .{});
+            //exe.addIncludePath(.{ .cwd_relative = "lib/linux/include" });
+            //exe.addLibraryPath(.{ .cwd_relative = "lib/linux/lib" });
+            exe.addIncludePath(b.path("lib/linux/include"));
+            exe.addLibraryPath(b.path("lib/linux/lib"));
+            //exe.linkSystemLibrary("raylib");
+            //exe.addObjectFile(.{ .cwd_relative = "./lib/linux/lib/libraylib.a" });
+            exe.linkSystemLibrary2("raylib",.{
+                .use_pkg_config = .no,
+            });
+            
         },
         else => {
             @panic("Unsupported OS");
         },
     }
     //exe.linkSystemLibrary("atomic");
-    exe.addIncludePath(.{ .path = "timer" });
-    exe.addCSourceFile(.{ .file = .{ .path = "timer/timer.c" }, .flags = &default_build });
-    exe.addIncludePath(.{ .path = "miniaudio/split" });
-    exe.addCSourceFile(.{ .file = .{ .path = "miniaudio/split/miniaudio.c" }, .flags = &default_build });
-    exe.addIncludePath(.{ .path = "raylibwrapper" });
-    exe.addCSourceFile(.{ .file = .{ .path = "raylibwrapper/raylibwrapper.c" }, .flags = &default_build });
-    exe.addIncludePath(.{ .path = "multifx" });
+    exe.addIncludePath(b.path("timer" ));
+    exe.addCSourceFile(.{ .file = b.path("timer/timer.c" ), .flags = &default_build });
+    exe.addIncludePath(b.path("miniaudio/split" ));
+    exe.addCSourceFile(.{ .file = b.path("miniaudio/split/miniaudio.c" ), .flags = &default_build });
+    exe.addIncludePath(b.path("raylibwrapper" ));
+    exe.addCSourceFile(.{ .file = b.path("raylibwrapper/raylibwrapper.c" ), .flags = &default_build });
+    exe.addIncludePath(b.path("multifx" ));
     exe.linkLibC();
     b.installArtifact(exe);
 
