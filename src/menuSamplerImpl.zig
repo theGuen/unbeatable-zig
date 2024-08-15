@@ -257,17 +257,32 @@ fn currentcrop(self: *SamplerValue) [*c]const u8 {
     return @ptrCast(self.state.stateValStr);
 }
 
+fn upSlice(self: *SamplerValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    _ = self.sampler.sliceSound(self.sampler.selectedSound);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "slicing", .{}) catch "";
+}
+fn downSlice(self: *SamplerValue) void {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "slice sample", .{}) catch "";
+}
+fn currentSlice(self: *SamplerValue) [*c]const u8 {
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "slice sample", .{}) catch "";
+    return @ptrCast(self.state.stateValStr);
+}
+
 fn upRow(self: *SamplerValue) void {
     self.sampler.row -= 1;
-    if (self.sampler.row < 0){
-        self.sampler.row  = 16 + self.sampler.row;
+    if (self.sampler.row < 0) {
+        self.sampler.row = 16 + self.sampler.row;
     }
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sampler.row }) catch "";
 }
 fn downRow(self: *SamplerValue) void {
     self.sampler.row += 1;
-    if (self.sampler.row > 15){
+    if (self.sampler.row > 15) {
         self.sampler.row = self.sampler.row - 16;
     }
     std.heap.page_allocator.free(self.state.stateValStr);
@@ -365,7 +380,7 @@ pub const SamplerMenuItem = struct {
 
 pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]SamplerMenuItem {
     var samplerMenuItem: []SamplerMenuItem = try alloc.alloc(SamplerMenuItem, 1);
-    var menuValues: []SamplerValue = try alloc.alloc(SamplerValue, 14);
+    var menuValues: []SamplerValue = try alloc.alloc(SamplerValue, 15);
     menuValues[0] = SamplerValue{ .sampler = sampler, .label = "gain", .increment = upgain, .decrement = downgain, .current = currentgain, .state = mn.newState() };
     menuValues[1] = SamplerValue{ .sampler = sampler, .label = "reverse", .increment = upreverse, .decrement = downreverse, .current = currentreverse, .state = mn.newState() };
     menuValues[2] = SamplerValue{ .sampler = sampler, .label = "loop", .increment = uploop, .decrement = downloop, .current = currentloop, .state = mn.newState() };
@@ -380,7 +395,8 @@ pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]Sa
     menuValues[10] = SamplerValue{ .sampler = sampler, .label = "move", .increment = upmovelazy, .decrement = downmovelazy, .current = currentmovelazy, .state = mn.newState() };
     menuValues[11] = SamplerValue{ .sampler = sampler, .label = "copy", .increment = upcopy, .decrement = downcopy, .current = currentcopy, .state = mn.newState() };
     menuValues[12] = SamplerValue{ .sampler = sampler, .label = "crop", .increment = upcrop, .decrement = downcrop, .current = currentcrop, .state = mn.newState() };
-    menuValues[13] = SamplerValue{ .sampler = sampler, .label = "row", .increment = upRow, .decrement = downRow, .current = currentRow, .state = mn.newState() };
+    menuValues[13] = SamplerValue{ .sampler = sampler, .label = "slice", .increment = upSlice, .decrement = downSlice, .current = currentSlice, .state = mn.newState() };
+    menuValues[14] = SamplerValue{ .sampler = sampler, .label = "row", .increment = upRow, .decrement = downRow, .current = currentRow, .state = mn.newState() };
 
     samplerMenuItem[0].label = "Sampler";
     samplerMenuItem[0].active = false;
@@ -389,4 +405,3 @@ pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]Sa
     samplerMenuItem[0].menuValues = menuValues;
     return samplerMenuItem;
 }
-

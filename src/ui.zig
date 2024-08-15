@@ -11,9 +11,9 @@ const settings = @import("settings.zig");
 pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequencer) !void {
     const screenWidth = 800;
     const screenHeight = 480;
-    const maxDispSamples = 44100 * 5;
+    const maxDispSamples = settings.sampleRate * 5;
     var smplDisp: [780]c_int = undefined;
-    var page_colors = [4]ray.Color{ray.PURPLE,ray.GREEN,ray.SKYBLUE,ray.BEIGE};
+    var page_colors = [4]ray.Color{ ray.PURPLE, ray.GREEN, ray.SKYBLUE, ray.BEIGE };
 
     _ = ray.SetGamepadMappings(@ptrCast(settings.gamePadMapping));
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
@@ -36,12 +36,12 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     for (&btn_colors) |*b| {
         b.* = ray.GREEN;
     }
-    
+
     const keys = [_]c_int{ ray.KEY_ONE, ray.KEY_TWO, ray.KEY_THREE, ray.KEY_FOUR, ray.KEY_Q, ray.KEY_W, ray.KEY_E, ray.KEY_R, ray.KEY_A, ray.KEY_S, ray.KEY_D, ray.KEY_F, ray.KEY_Z, ray.KEY_X, ray.KEY_C, ray.KEY_V };
 
     var currentPad: usize = 0;
     var joyStickDetected: bool = false;
-     
+
     var left = false;
     var right = false;
     var up = false;
@@ -123,19 +123,19 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         defer ray.EndDrawing();
 
         var cur_row: usize = 0;
-        if(!sequencer.stepMode){
+        if (!sequencer.stepMode) {
             cur_row = @intCast(samplers.row);
-        }else{
+        } else {
             cur_row = @intCast(sequencer.curBar);
         }
         //CALC_SEQ
-        const sixteenth = sequencer.sixteenth(samplers.selectedSound,cur_row);
-        for (0..sixteenth.len)|x|{
-            if(sixteenth[x]){
+        const sixteenth = sequencer.sixteenth(samplers.selectedSound, cur_row);
+        for (0..sixteenth.len) |x| {
+            if (sixteenth[x]) {
                 btn_colors[x] = ray.ORANGE;
                 btn_colors_prev[x] = ray.ORANGE;
-            }else{
-                btn_colors[x] = page_colors[cur_row/4];
+            } else {
+                btn_colors[x] = page_colors[cur_row / 4];
             }
         }
         //--------------------------------------------------------------------------------------------------------------------------
@@ -158,33 +158,32 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
         const but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
 
-        
         if (but_a) {
-            currentPad = padPressed(0,cur_row,samplers,sequencer,&btn_colors);
+            currentPad = padPressed(0, cur_row, samplers, sequencer, &btn_colors);
         }
-        if (but_a_rel){
-            _ = padRelease(0,cur_row,samplers,sequencer,&btn_colors,&page_colors);
+        if (but_a_rel) {
+            _ = padRelease(0, cur_row, samplers, sequencer, &btn_colors, &page_colors);
         }
 
         if (but_b) {
-            currentPad = padPressed(1,cur_row,samplers,sequencer,&btn_colors);
+            currentPad = padPressed(1, cur_row, samplers, sequencer, &btn_colors);
         }
         if (but_b_rel) {
-            _ = padRelease(1,cur_row,samplers,sequencer,&btn_colors,&page_colors);
+            _ = padRelease(1, cur_row, samplers, sequencer, &btn_colors, &page_colors);
         }
 
         if (but_x) {
-            currentPad = padPressed(2,cur_row,samplers,sequencer,&btn_colors);
+            currentPad = padPressed(2, cur_row, samplers, sequencer, &btn_colors);
         }
         if (but_x_rel) {
-            _ = padRelease(2,cur_row,samplers,sequencer,&btn_colors,&page_colors);
+            _ = padRelease(2, cur_row, samplers, sequencer, &btn_colors, &page_colors);
         }
 
         if (but_y) {
-            currentPad = padPressed(3,cur_row,samplers,sequencer,&btn_colors);
+            currentPad = padPressed(3, cur_row, samplers, sequencer, &btn_colors);
         }
         if (but_y_rel) {
-            _ = padRelease(3,cur_row,samplers,sequencer,&btn_colors,&page_colors);
+            _ = padRelease(3, cur_row, samplers, sequencer, &btn_colors, &page_colors);
         }
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
@@ -221,10 +220,10 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         for (keys, 0..) |k, i| {
             if (ray.IsKeyPressed(k)) {
-                currentPad = padPressed(i,cur_row,samplers,sequencer,&btn_colors);
+                currentPad = padPressed(i, cur_row, samplers, sequencer, &btn_colors);
             }
             if (ray.IsKeyReleased(k)) {
-                _ = padRelease(i,cur_row,samplers,sequencer,&btn_colors,&page_colors);
+                _ = padRelease(i, cur_row, samplers, sequencer, &btn_colors, &page_colors);
             }
         }
         //--------------------------------------------------------------------------------------------------------------------------
@@ -281,7 +280,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
         // DRAW Active Buttons (Gamepi)
-        const i: c_int = @intCast(cur_row%4);
+        const i: c_int = @intCast(cur_row % 4);
         const ix = @as(c_int, 5);
         const iy = 215 + i * 10 + i * 50;
         ray.DrawRectangleLines(ix, iy, 240, 60, ray.RED);
@@ -323,40 +322,39 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
 
         var bl = ray.Rectangle{ .x = 620, .y = 395, .width = 150, .height = 50 };
         ray.WrapDrawRectangleRec(&bl, ray.DARKBROWN);
-        
     }
 }
 
-pub fn padPressed(i:usize,r:usize,samplers: *smplr.Sampler,sequencer: *seq.Sequencer,btn_colors: []ray.Color)usize{
+pub fn padPressed(i: usize, r: usize, samplers: *smplr.Sampler, sequencer: *seq.Sequencer, btn_colors: []ray.Color) usize {
     var currentPad = i + (4 * r);
-    if (currentPad > 63){
+    if (currentPad > 63) {
         currentPad = currentPad - 64;
     }
-    const pad_color_index = currentPad-((r/4)*16);
+    const pad_color_index = currentPad - ((r / 4) * 16);
     btn_colors[pad_color_index] = ray.ORANGE;
-    if(!sequencer.stepMode){
+    if (!sequencer.stepMode) {
         if (sequencer.prepared) {
             _ = sequencer.startRecording();
             sequencer.prepared = false;
         }
         samplers.play(currentPad, true);
         sequencer.appendToRecord(currentPad);
-    }else{
+    } else {
         btn_colors[pad_color_index] = ray.RED;
-        sequencer.toggle(samplers.selectedSound,@intCast(currentPad * (settings.ppq/4)));
+        sequencer.toggle(samplers.selectedSound, @intCast(currentPad * (settings.ppq / 4)));
     }
     return currentPad;
 }
 
-pub fn padRelease(i:usize,r:usize,samplers: *smplr.Sampler,sequencer: *seq.Sequencer,btn_colors: []ray.Color, page_colors: []ray.Color)usize{
+pub fn padRelease(i: usize, r: usize, samplers: *smplr.Sampler, sequencer: *seq.Sequencer, btn_colors: []ray.Color, page_colors: []ray.Color) usize {
     _ = sequencer;
     var currentPad = i + (4 * r);
-    if (currentPad > 63){
+    if (currentPad > 63) {
         currentPad = currentPad - 64;
     }
-    const pad_color_index = currentPad-((r/4)*16);
+    const pad_color_index = currentPad - ((r / 4) * 16);
     samplers.stop(currentPad);
-    btn_colors[pad_color_index] = page_colors[r/4];
+    btn_colors[pad_color_index] = page_colors[r / 4];
     return currentPad;
 }
 
@@ -420,7 +418,7 @@ const ButtonStates = struct {
     }
 };
 
-fn NewButtonStates() ButtonStates{
+fn NewButtonStates() ButtonStates {
     return ButtonStates{
         .left = false,
         .right = false,

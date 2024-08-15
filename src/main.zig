@@ -143,14 +143,14 @@ pub fn main() !void {
     deviceConfig.playback.format = mah.ma_format_f32;
     deviceConfig.playback.channels = 2;
 
-    if (context.backend != mah.ma_backend_alsa){
+    if (context.backend != mah.ma_backend_alsa) {
         deviceConfig.capture.pDeviceID = @constCast(deviceIdCapture);
         deviceConfig.capture.format = mah.ma_format_f32;
         deviceConfig.capture.channels = 2;
         deviceConfig.capture.shareMode = mah.ma_share_mode_shared;
     }
 
-    deviceConfig.sampleRate = 48000;
+    deviceConfig.sampleRate = settings.sampleRate;
     deviceConfig.dataCallback = ma.audio_callback;
     deviceConfig.pUserData = null;
     var r = mah.ma_device_init(&context, &deviceConfig, &device);

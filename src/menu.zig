@@ -29,7 +29,7 @@ pub fn newState() State {
     };
 }
 pub fn newStateLabeled(label: []u8) State {
-    const stateStr =std.fmt.allocPrint(std.heap.page_allocator, "{s}", .{label}) catch "";
+    const stateStr = std.fmt.allocPrint(std.heap.page_allocator, "{s}", .{label}) catch "";
     //TODO: 0 termination in 0.11
     //stateStr[stateStr.len - 1] = 0;
     return State{
@@ -102,6 +102,10 @@ pub const Menu = struct {
             std.debug.print("Deinit MenuItem {?}", .{@TypeOf(m)});
             if (@TypeOf(m) == fileMenuImpl.FileMenuItem) {
                 std.debug.print("Deinit Filemenu\n", .{});
+                for (m.menuValues.items) |*weg| {
+                    self.alloc.free(weg.name);
+                    self.alloc.free(weg.path);
+                }
                 m.menuValues.deinit();
             } else {
                 std.debug.print("...skip\n", .{});

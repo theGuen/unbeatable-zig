@@ -10,6 +10,7 @@ pub var currentProj: []u8 = @constCast("project1.asd");
 pub const script_path = "./shutdown.sh";
 
 //Audio
+pub const sampleRate: i64 = 48000;
 //pub const coreaudioDefaultDevice: []u8 = @constCast("Externe Kopfhörer");
 pub const coreaudioDefaultDevice: []u8 = @constCast("USB Audio CODEC");
 pub const alsaDefaultDevice: []u8 = @constCast("USB Audio CODEC, USB Audio");

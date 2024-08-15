@@ -10,14 +10,14 @@ const Info = extern struct {
     seekable: c_int,
 };
 pub fn loadAudioFile(allocator: std.mem.Allocator, inFileName: []const u8) ![]f32 {
-    var sndFileInfo = try std.heap.c_allocator.create(Info);
+    const sndFileInfo = try std.heap.c_allocator.create(Info);
     defer std.heap.c_allocator.destroy(sndFileInfo);
 
-    var sndFileInfoPtr = @as([*c]sf.SF_INFO,@ptrCast( sndFileInfo));
+    const sndFileInfoPtr = @as([*c]sf.SF_INFO, @ptrCast(sndFileInfo));
     const inFile = sf.sf_open(inFileName.ptr, sf.SFM_READ, sndFileInfoPtr);
     defer _ = sf.sf_close(inFile);
-    std.debug.print("File is: {d}\n", .{ sndFileInfo.format });
-    std.debug.print("Frames / Channels / Rate: {d} / {d} / {d}\n", .{ sndFileInfo.frames, sndFileInfo.channels,sndFileInfo.samplerate });
+    std.debug.print("File is: {d}\n", .{sndFileInfo.format});
+    std.debug.print("Frames / Channels / Rate: {d} / {d} / {d}\n", .{ sndFileInfo.frames, sndFileInfo.channels, sndFileInfo.samplerate });
 
     var mybuffer: []f32 = undefined;
     const arrayLen = @as(usize, @intCast(sndFileInfo.frames * sndFileInfo.channels));

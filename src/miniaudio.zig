@@ -3,6 +3,7 @@ const ma = @cImport(@cInclude("miniaudio.h"));
 const mfx = @cImport(@cInclude("multifx22.h"));
 const ui = @import("UIGlue.zig");
 const rcdr = @import("recorder.zig");
+const settings = @import("settings.zig");
 
 const mixerFunction = *const fn () [2]f32;
 //pub var startAudioFrame: anyframe = undefined;
@@ -17,7 +18,7 @@ pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocat
     recorder = aRecorder;
 
     fx = mfx.newmydsp();
-    mfx.initmydsp(fx, 44100);
+    mfx.initmydsp(fx, settings.sampleRate);
 
     const uiGlue = try ui.newUIGlue();
     const uiGlue_c = @as([*c]mfx.UIGlue, @ptrCast(uiGlue));
@@ -28,7 +29,7 @@ pub fn init(anAudioAllocator: std.mem.Allocator, aMenuAllocator: std.mem.Allocat
 
 pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
     const buffer = @as([*c]f32, @ptrCast(@alignCast(myBuffer)));
-    var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
+    var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, settings.sampleRate);
     var encoder = std.mem.zeroes(ma.ma_encoder);
     var r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
     defer ma.ma_encoder_uninit(&encoder);
@@ -42,7 +43,7 @@ pub fn saveAudioFile(inFileName: []const u8, myBuffer: []f32) !void {
 }
 
 pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !void {
-    var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, 44100);
+    var config = ma.ma_encoder_config_init(ma.ma_encoding_format_wav, ma.ma_format_f32, 2, settings.sampleRate);
     var encoder = std.mem.zeroes(ma.ma_encoder);
     const r = ma.ma_encoder_init_file(inFileName.ptr, &config, &encoder);
     defer ma.ma_encoder_uninit(&encoder);
@@ -60,14 +61,15 @@ pub fn saveRecordedFile(inFileName: []const u8, list: std.ArrayList([]f32)) !voi
 
 pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
     var decoder = std.mem.zeroes(ma.ma_decoder);
-    var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, 44100);
+    var config = ma.ma_decoder_config_init(ma.ma_format_f32, 2, settings.sampleRate);
     var r = ma.ma_decoder_init_file(inFileName.ptr, &config, &decoder);
     defer _ = ma.ma_decoder_uninit(&decoder);
+    std.debug.print("file openend: {d}/{d}\n", .{ decoder.outputChannels, decoder.outputSampleRate });
     if (r != ma.MA_SUCCESS) {
         std.debug.print("Could not load file {s}: {d}\n", .{ inFileName, r });
         return error.Unknown;
     }
-    //std.debug.print("file openend: {d}/{d}\n", .{ decoder.outputChannels, decoder.outputSampleRate });
+
     var avail: c_ulonglong = 0;
     r = ma.ma_decoder_get_available_frames(&decoder, &avail);
     if (r != ma.MA_SUCCESS) {
@@ -87,9 +89,8 @@ pub fn loadAudioFile(alloc: std.mem.Allocator, inFileName: []const u8) ![]f32 {
     return mybuffer;
 }
 
-
-pub fn audio_callback(mydevice: ?*ma.ma_device,out: ?*anyopaque,input: ?*const anyopaque,frame_count: ma.ma_uint32) callconv(.C) void {
-    if (mydevice == null or out == null or input == null) {
+pub fn audio_callback(mydevice: ?*ma.ma_device, out: ?*anyopaque, input: ?*const anyopaque, frame_count: ma.ma_uint32) callconv(.C) void {
+    if (mydevice == null or out == null) {
         return;
     }
 
@@ -131,7 +132,7 @@ pub fn audio_callback(mydevice: ?*ma.ma_device,out: ?*anyopaque,input: ?*const a
     var rb = allocator.alloc(f32, rlen) catch return;
 
     // Combine input and mix
-    if (recorder.lineIn) {
+    if (recorder.lineIn and input != null) {
         for (0..frame_count) |i| {
             l[i] += inw[i * 2];
             r[i] += inw[i * 2 + 1];
@@ -150,13 +151,12 @@ pub fn audio_callback(mydevice: ?*ma.ma_device,out: ?*anyopaque,input: ?*const a
     recorder.appendToRecord(rb);
 }
 
-
 pub fn startAudio() !bool {
     var device = std.mem.zeroes(ma.ma_device);
     var deviceConfig = ma.ma_device_config_init(ma.ma_device_type_duplex);
     deviceConfig.playback.format = ma.ma_format_f32;
     deviceConfig.playback.channels = 2;
-    deviceConfig.sampleRate = 44100;
+    deviceConfig.sampleRate = settings.sampleRate;
     deviceConfig.dataCallback = audio_callback;
     deviceConfig.pUserData = null;
     var r = ma.ma_device_init(null, &deviceConfig, &device);

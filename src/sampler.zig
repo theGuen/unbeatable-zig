@@ -2,6 +2,7 @@ const std = @import("std");
 const math = @import("std").math;
 const ma = @import("miniaudio.zig");
 const settings = @import("settings.zig");
+const sndFile = @import("sndFile.zig");
 
 var m = std.Thread.Mutex{};
 pub const Sampler = struct {
@@ -133,7 +134,7 @@ pub const Sampler = struct {
         sound.playing = false;
         const b = sound.buffer;
         const nb = cropSample(self.alloc, b, @intFromFloat(sound.start), @intFromFloat(sound.end)) catch return false;
-        sound.buffer = nb;
+        self.load(nb, src);
         sound.end = sound.end - sound.start - 1;
         sound.start = 0;
         return true;
@@ -159,6 +160,40 @@ pub const Sampler = struct {
         soundd.pitch = sound.pitch;
         soundd.semis = sound.semis;
         soundd.mutegroup = sound.mutegroup;
+        return true;
+    }
+
+    pub fn sliceSound(self: *Sampler, src: usize) bool {
+        std.debug.print("slicing {d}\n", .{src});
+        var dest = src;
+        const sound: *Sound = &self.sounds[src];
+        const b = sound.buffer;
+        const tb = copySample(self.alloc, b) catch return false;
+        defer {
+            self.alloc.free(tb[0]);
+            self.alloc.free(tb[1]);
+            self.alloc.free(tb);
+        }
+        if (b.len > 0) {
+            const newLength = b[0].len / 16;
+            for (0..16) |x| {
+                dest = src + x;
+                var soundd = &self.sounds[dest];
+                soundd.playing = false;
+                std.debug.print("len {d} - from {d} to {d}, dest {d},\n", .{ tb[0].len, x * newLength, (x + 1) * newLength, dest });
+                const nb = cropSample(self.alloc, tb, x * newLength, (x + 1) * newLength) catch return false;
+                self.load(nb, dest);
+                soundd.gain = sound.gain;
+                soundd.start = 0;
+                soundd.end = @floatFromInt(newLength - 1);
+                soundd.looping = sound.looping;
+                soundd.reversed = sound.reversed;
+                soundd.gated = sound.gated;
+                soundd.pitch = sound.pitch;
+                soundd.semis = sound.semis;
+                soundd.mutegroup = sound.mutegroup;
+            }
+        }
         return true;
     }
 };
@@ -353,7 +388,7 @@ pub fn loadSamplerConfig(alloc: std.mem.Allocator, samplers: *Sampler, projectNa
         snd.mutegroup = newSound.mutegroup;
         snd.mixbus = newSound.mixbus;
     }
-    samplers.selectedSound=0;
+    samplers.selectedSound = 0;
 }
 
 pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
@@ -362,7 +397,6 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
 
     var sw: SamplerW = undefined;
     for (&sw.sounds, 0..) |*snd, i| {
-        
         const string = try std.fmt.allocPrint(arena.allocator(), "{s}/snd_{d}.wav", .{ settings.currentProj, i });
         snd.name = string;
         snd.gain = sampler.sounds[i].gain;
@@ -379,8 +413,8 @@ pub fn saveSamplerConfig(alloc: std.mem.Allocator, sampler: *Sampler) !void {
         str[string.len] = 0;
         for (string, 0..) |c, ii| str[ii] = c;
         const join = try joinSample(arena.allocator(), sampler.sounds[i].buffer);
-        if(sampler.sounds[i].start!=sampler.sounds[i].end){
-        try ma.saveAudioFile(str, join);
+        if (sampler.sounds[i].start != sampler.sounds[i].end) {
+            try ma.saveAudioFile(str, join);
         }
     }
 

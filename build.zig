@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
 
-    //0.11
+    //0.13
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
     const exe = b.addExecutable(.{
@@ -25,7 +25,6 @@ pub fn build(b: *std.Build) void {
     });
     // const default_build = [_][]const u8{"-std=c99"};
     const default_build = [_][]const u8{"-std=gnu99"};
-    //exe.single_threaded = b.option(bool, "single-threaded", "Build artifacts that run in single threaded mode") orelse false;
     switch (target.result.os.tag) {
         .macos => {
             std.debug.print("Buildning MACOS\n", .{});
@@ -33,51 +32,28 @@ pub fn build(b: *std.Build) void {
             exe.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             exe.linkSystemLibrary("raylib");
             exe.linkSystemLibrary("sndfile");
-            //exe.addIncludePath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/include" });
-            //exe.addLibraryPath(.{ .path = "/Users/gs/Downloads/raylib-5.0_macos/lib" });
-            //exe.linkSystemLibraryName("raylib");
         },
         .linux => {
             std.debug.print("Buildning LINUX\n", .{});
-            //exe.addIncludePath(.{ .cwd_relative = "lib/linux/include" });
-            //exe.addLibraryPath(.{ .cwd_relative = "lib/linux/lib" });
             exe.addIncludePath(b.path("lib/linux/include"));
             exe.addLibraryPath(b.path("lib/linux/lib"));
-            //exe.linkSystemLibrary("raylib");
+            //exe.addIncludePath(b.path("ray5/include"));
+            //exe.addLibraryPath(b.path("ray5/lib"));
+            exe.linkSystemLibrary2("raylib", .{ .use_pkg_config = .no });
             //exe.addObjectFile(.{ .cwd_relative = "./lib/linux/lib/libraylib.a" });
-            exe.linkSystemLibrary2("raylib",.{
-                .use_pkg_config = .no,
-            });
-            
         },
         else => {
             @panic("Unsupported OS");
         },
     }
     //exe.linkSystemLibrary("atomic");
-    exe.addIncludePath(b.path("timer" ));
-    exe.addCSourceFile(.{ .file = b.path("timer/timer.c" ), .flags = &default_build });
-    exe.addIncludePath(b.path("miniaudio/split" ));
-    exe.addCSourceFile(.{ .file = b.path("miniaudio/split/miniaudio.c" ), .flags = &default_build });
-    exe.addIncludePath(b.path("raylibwrapper" ));
-    exe.addCSourceFile(.{ .file = b.path("raylibwrapper/raylibwrapper.c" ), .flags = &default_build });
-    exe.addIncludePath(b.path("multifx" ));
+    exe.addIncludePath(b.path("timer"));
+    exe.addCSourceFile(.{ .file = b.path("timer/timer.c"), .flags = &default_build });
+    exe.addIncludePath(b.path("miniaudio/split"));
+    exe.addCSourceFile(.{ .file = b.path("miniaudio/split/miniaudio.c"), .flags = &default_build });
+    exe.addIncludePath(b.path("raylibwrapper"));
+    exe.addCSourceFile(.{ .file = b.path("raylibwrapper/raylibwrapper.c"), .flags = &default_build });
+    exe.addIncludePath(b.path("multifx"));
     exe.linkLibC();
     b.installArtifact(exe);
-
-    ////const run_cmd = exe.run();
-    ////run_cmd.step.dependOn(b.getInstallStep());
-    ////if (b.args) |args| {
-    ////    run_cmd.addArgs(args);
-    ////}
-
-    ////const run_step = b.step("run", "Run the app");
-    ////run_step.dependOn(&run_cmd.step);
-
-    ////const exe_tests = b.addTest("src/main.zig");
-    ////exe_tests.setTarget(target);
-    ////exe_tests.setBuildMode(mode);
-
-    ////const test_step = b.step("test", "Run unit tests");
-    ////test_step.dependOn(&exe_tests.step);
 }

@@ -64,13 +64,20 @@ pub const FileMenuItem = struct {
                 const parentDir = h.StringConcat(self.alloc, item.path, item.name) catch return {};
                 defer self.alloc.free(parentDir);
                 const mnv = h.readDirectory(self.alloc, parentDir) catch return {};
+
                 if (mnv.items.len == 0) {
                     self.valueStr = self.alloc.alloc(u8, 6) catch return {};
                     @memcpy(self.valueStr[0..5], "3mpty"[0..5]);
                     self.valueStr[5] = 0;
                     return;
                 }
+
+                for (self.menuValues.items) |*weg| {
+                    self.alloc.free(weg.name);
+                    self.alloc.free(weg.path);
+                }
                 self.menuValues.deinit();
+
                 self.menuValues = mnv;
                 self.selected = 0;
                 self.valueStr = self.menuValues.items[self.selected].name;
@@ -81,7 +88,13 @@ pub const FileMenuItem = struct {
         const item = self.menuValues.items[self.selected];
         const parentDir = h.StringConcat(self.alloc, item.path, "..") catch return {};
         defer self.alloc.free(parentDir);
+
+        for (self.menuValues.items) |*weg| {
+            self.alloc.free(weg.name);
+            self.alloc.free(weg.path);
+        }
         self.menuValues.deinit();
+
         self.menuValues = h.readDirectory(self.alloc, parentDir) catch return {};
         self.selected = 0;
         self.valueStr = self.menuValues.items[self.selected].name;
