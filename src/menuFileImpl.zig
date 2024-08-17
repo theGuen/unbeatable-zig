@@ -16,11 +16,13 @@ pub const FileMenuItem = struct {
     active: bool,
     selected: usize,
     valueStr: []u8,
+    deinit: bool,
     menuValues: std.ArrayList(h.DirEntry),
     pub fn iMenuItem(self: *FileMenuItem) ui.IMenuItem {
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
+            .leaveFn = leaveIImpl,
             .rightFn = rightIImpl,
             .leftFn = leftIImpl,
             .upFn = upIImpl,
@@ -33,6 +35,7 @@ pub const FileMenuItem = struct {
         self.selected = 0;
         self.menuValues = h.readDirectory(self.alloc, ".") catch return {};
         self.valueStr = self.menuValues.items[self.selected].name;
+        self.deinit = false;
     }
 
     pub fn right(self: *FileMenuItem) void {
@@ -124,6 +127,19 @@ pub const FileMenuItem = struct {
         var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
+    pub fn leaveIImpl(self_void: *anyopaque) void {
+        var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
+
+        if (!self.deinit) {
+            std.debug.print("Deinit Filemenu\n", .{});
+            for (self.menuValues.items) |*weg| {
+                self.alloc.free(weg.name);
+                self.alloc.free(weg.path);
+            }
+            self.menuValues.deinit();
+            self.deinit = true;
+        }
+    }
     pub fn rightIImpl(self_void: *anyopaque) void {
         var self: *FileMenuItem = @ptrCast(@alignCast(self_void));
         self.right();
@@ -158,5 +174,6 @@ pub fn buildFIleMenu(arena: std.mem.Allocator, alloc: std.mem.Allocator, sampler
     menuItem[0].active = false;
     menuItem[0].selected = 0;
     menuItem[0].valueStr = "";
+    menuItem[0].menuValues = std.ArrayList(h.DirEntry).init(alloc);
     return menuItem;
 }

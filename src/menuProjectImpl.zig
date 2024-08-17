@@ -6,6 +6,9 @@ const smplr = @import("sampler.zig");
 const menu = @import("menu.zig");
 const settings = @import("settings.zig");
 
+fn leave(self: *ProjectValue) void {
+    _ = self;
+}
 fn upsave(self: *ProjectValue) void {
     smplr.saveSamplerConfig(self.alloc, self.sampler) catch {};
     seq.saveSequence(self.sequencer) catch {};
@@ -43,7 +46,10 @@ fn currentBPM(self: *ProjectValue) [*c]const u8 {
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "BPM {d}", .{settings.bpm}) catch "";
     return @ptrCast(self.state.stateValStr);
 }
-
+fn leaveBPM(self: *ProjectValue) void {
+    std.debug.print("Set BPM\n", .{});
+    self.sequencer.setBPM();
+}
 fn upexit(self: *ProjectValue) void {
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValInt = self.state.stateValInt + 1;
@@ -83,6 +89,7 @@ const ProjectValue = struct {
     increment: *const fn (self: *ProjectValue) void,
     decrement: *const fn (self: *ProjectValue) void,
     current: *const fn (self: *ProjectValue) [*c]const u8,
+    leave: *const fn (self: *ProjectValue) void,
 };
 pub const ProjectMenuItem = struct {
     label: [*c]const u8,
@@ -94,6 +101,7 @@ pub const ProjectMenuItem = struct {
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
+            .leaveFn = leaveIImpl,
             .rightFn = rightIImpl,
             .leftFn = leftIImpl,
             .upFn = upIImpl,
@@ -127,6 +135,10 @@ pub const ProjectMenuItem = struct {
         var menuValueSelf = &self.menuValues[self.selected];
         menuValueSelf.decrement(menuValueSelf);
     }
+    pub fn leave(self: *ProjectMenuItem) void {
+        var menuValueSelf = &self.menuValues[self.selected];
+        menuValueSelf.leave(menuValueSelf);
+    }
     pub fn current(self: *ProjectMenuItem) [*c]const u8 {
         var menuValueSelf = &self.menuValues[self.selected];
         return menuValueSelf.current(menuValueSelf);
@@ -135,6 +147,10 @@ pub const ProjectMenuItem = struct {
     pub fn enterIImpl(self_void: *anyopaque) void {
         var self: *ProjectMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
+    }
+    pub fn leaveIImpl(self_void: *anyopaque) void {
+        var self: *ProjectMenuItem = @ptrCast(@alignCast(self_void));
+        self.leave();
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
         var self: *ProjectMenuItem = @ptrCast(@alignCast(self_void));
@@ -165,9 +181,9 @@ pub const ProjectMenuItem = struct {
 pub fn buildProjectMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequencer: *seq.Sequencer, sampler: *smplr.Sampler) ![]ProjectMenuItem {
     var menuItem: []ProjectMenuItem = try alloc.alloc(ProjectMenuItem, 1);
     var menuValues: []ProjectValue = try alloc.alloc(ProjectValue, 3);
-    menuValues[0] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "project BPM", .increment = upBPM, .decrement = downBPM, .current = currentBPM, .loaded = false, .state = menu.newState() };
-    menuValues[1] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "save project", .increment = upsave, .decrement = downsave, .current = currentsave, .loaded = false, .state = menu.newState() };
-    menuValues[2] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quit ASD", .increment = upexit, .decrement = downexit, .current = currentexit, .loaded = false, .state = menu.newState() };
+    menuValues[0] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "project BPM", .increment = upBPM, .decrement = downBPM, .current = currentBPM, .leave = leaveBPM, .loaded = false, .state = menu.newState() };
+    menuValues[1] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "save project", .increment = upsave, .decrement = downsave, .current = currentsave, .leave = leave, .loaded = false, .state = menu.newState() };
+    menuValues[2] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quit ASD", .increment = upexit, .decrement = downexit, .current = currentexit, .leave = leave, .loaded = false, .state = menu.newState() };
 
     menuItem[0].label = "Project";
     menuItem[0].active = false;

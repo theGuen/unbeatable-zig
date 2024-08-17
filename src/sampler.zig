@@ -196,6 +196,22 @@ pub const Sampler = struct {
         }
         return true;
     }
+    pub fn incrementRow(self: *Sampler) c_int {
+        if (self.row < 15) {
+            self.row += 1;
+        } else {
+            self.row = 0;
+        }
+        return self.row;
+    }
+    pub fn decrementRow(self: *Sampler) c_int {
+        if (self.row > 0) {
+            self.row -= 1;
+        } else {
+            self.row = 15;
+        }
+        return self.row;
+    }
 };
 pub fn initSampler(alloc: std.mem.Allocator) Sampler {
     var this = Sampler{ .alloc = alloc, .selectedSound = 0, .row = 0, .sounds = undefined };

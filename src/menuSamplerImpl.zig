@@ -273,18 +273,12 @@ fn currentSlice(self: *SamplerValue) [*c]const u8 {
 }
 
 fn upRow(self: *SamplerValue) void {
-    self.sampler.row -= 1;
-    if (self.sampler.row < 0) {
-        self.sampler.row = 16 + self.sampler.row;
-    }
+    _ = self.sampler.decrementRow();
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sampler.row }) catch "";
 }
 fn downRow(self: *SamplerValue) void {
-    self.sampler.row += 1;
-    if (self.sampler.row > 15) {
-        self.sampler.row = self.sampler.row - 16;
-    }
+    _ = self.sampler.incrementRow();
     std.heap.page_allocator.free(self.state.stateValStr);
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "{s} {d}", .{ self.label, self.sampler.row }) catch "";
 }
@@ -310,6 +304,7 @@ pub const SamplerMenuItem = struct {
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
+            .leaveFn = leaveIImpl,
             .rightFn = rightIImpl,
             .leftFn = leftIImpl,
             .upFn = upIImpl,
@@ -351,6 +346,9 @@ pub const SamplerMenuItem = struct {
     pub fn enterIImpl(self_void: *anyopaque) void {
         var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
+    }
+    pub fn leaveIImpl(self_void: *anyopaque) void {
+        _ = self_void;
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
         var self: *SamplerMenuItem = @ptrCast(@alignCast(self_void));
@@ -396,7 +394,7 @@ pub fn buildSamplerMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]Sa
     menuValues[11] = SamplerValue{ .sampler = sampler, .label = "copy", .increment = upcopy, .decrement = downcopy, .current = currentcopy, .state = mn.newState() };
     menuValues[12] = SamplerValue{ .sampler = sampler, .label = "crop", .increment = upcrop, .decrement = downcrop, .current = currentcrop, .state = mn.newState() };
     menuValues[13] = SamplerValue{ .sampler = sampler, .label = "slice", .increment = upSlice, .decrement = downSlice, .current = currentSlice, .state = mn.newState() };
-    menuValues[14] = SamplerValue{ .sampler = sampler, .label = "row", .increment = upRow, .decrement = downRow, .current = currentRow, .state = mn.newState() };
+    menuValues[14] = SamplerValue{ .sampler = sampler, .label = "Row", .increment = upRow, .decrement = downRow, .current = currentRow, .state = mn.newStateLabeled(@constCast("Row 0")) };
 
     samplerMenuItem[0].label = "Sampler";
     samplerMenuItem[0].active = false;

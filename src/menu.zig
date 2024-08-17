@@ -46,6 +46,7 @@ pub const Menu = struct {
     menuItems: []ui.IMenuItem,
     _currentIndex: usize,
     _active: bool = false,
+
     pub fn next(self: *Menu) void {
         var item = &self.menuItems[self._currentIndex];
         if (self._active) {
@@ -86,8 +87,11 @@ pub const Menu = struct {
         self._active = true;
         _ = self.menuItems[self._currentIndex].enter();
     }
-    pub fn leave(self: *Menu) void {
+    pub fn leave(self: *Menu) bool {
+        std.debug.print("LEAVE Menu\n", .{});
+        _ = self.menuItems[self._currentIndex].leave();
         self._active = false;
+        return self._active;
     }
     pub fn current(self: *Menu) [*c]const u8 {
         var item = &self.menuItems[self._currentIndex];
@@ -99,17 +103,7 @@ pub const Menu = struct {
     pub fn deinit(self: *Menu) void {
         std.debug.print("Deinit Menu\n", .{});
         for (self.menuItems) |m| {
-            std.debug.print("Deinit MenuItem {?}", .{@TypeOf(m)});
-            if (@TypeOf(m) == fileMenuImpl.FileMenuItem) {
-                std.debug.print("Deinit Filemenu\n", .{});
-                for (m.menuValues.items) |*weg| {
-                    self.alloc.free(weg.name);
-                    self.alloc.free(weg.path);
-                }
-                m.menuValues.deinit();
-            } else {
-                std.debug.print("...skip\n", .{});
-            }
+            std.debug.print("TODO: Deinit MenuItem {?}\n", .{@TypeOf(m)});
         }
     }
 };

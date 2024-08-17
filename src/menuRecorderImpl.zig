@@ -62,7 +62,6 @@ fn currentLineIn(self: *RecorderValue) [*c]const u8 {
 fn uprecseq(self: *RecorderValue) void {
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "sequence prepared", .{}) catch "";
     self.state.stateValInt = 1;
-    self.sequencer.setBPM();
     self.sequencer.prepared = true;
 }
 fn downrecseq(self: *RecorderValue) void {
@@ -80,7 +79,6 @@ fn currentrecseq(self: *RecorderValue) [*c]const u8 {
     }
     return @ptrCast(self.state.stateValStr);
 }
-
 
 fn upclickTrack(self: *RecorderValue) void {
     std.heap.page_allocator.free(self.state.stateValStr);
@@ -171,6 +169,7 @@ pub const RecorderMenuItem = struct {
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
+            .leaveFn = leaveIImpl,
             .rightFn = rightIImpl,
             .leftFn = leftIImpl,
             .upFn = upIImpl,
@@ -212,6 +211,9 @@ pub const RecorderMenuItem = struct {
     pub fn enterIImpl(self_void: *anyopaque) void {
         var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
+    }
+    pub fn leaveIImpl(self_void: *anyopaque) void {
+        _ = self_void;
     }
     pub fn rightIImpl(self_void: *anyopaque) void {
         var self: *RecorderMenuItem = @ptrCast(@alignCast(self_void));
@@ -259,4 +261,3 @@ pub fn buildRecorderMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, seq
 
     return menuItem;
 }
-

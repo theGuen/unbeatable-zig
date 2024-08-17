@@ -15,7 +15,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     var smplDisp: [780]c_int = undefined;
     var page_colors = [4]ray.Color{ ray.PURPLE, ray.GREEN, ray.SKYBLUE, ray.BEIGE };
 
-    _ = ray.SetGamepadMappings(@ptrCast(settings.gamePadMapping));
+    //_ = ray.SetGamepadMappings(@ptrCast(settings.gamePadMapping));
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
     defer ray.CloseWindow();
     ray.SetTargetFPS(30);
@@ -50,7 +50,8 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     var right_prev = false;
     var up_prev = false;
     var down_prev = false;
-
+    var menuMode = false;
+    var menuactive = false;
     while (!ray.WindowShouldClose() and !settings.exit) {
         currentPad = samplers.selectedSound;
         joyStickDetected = ray.IsGamepadAvailable(0);
@@ -121,6 +122,29 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
         ray.BeginDrawing();
         defer ray.EndDrawing();
+        //-------
+        //8, 9
+        //var offy: c_int = 5;
+        //for (0..4) |i| // MAX_GAMEPADS = 4
+        //{
+        //    if (ray.IsGamepadAvailable(@intCast(i))) {
+        //        ray.DrawText(ray.TextFormat("Gamepad name: %s", ray.GetGamepadName(@intCast(i))), 10, offy, 10, ray.WHITE);
+        //        offy = offy + 11;
+        //        ray.DrawText(ray.TextFormat("\tAxis count:   %d", ray.GetGamepadAxisCount(@intCast(i))), 10, offy, 10, ray.WHITE);
+        //        offy = offy + 11;
+        //
+        //        for (0..@intCast(ray.GetGamepadAxisCount(@intCast(i)))) |axis| {
+        //            ray.DrawText(ray.TextFormat("\tAxis %d = %f", axis, ray.GetGamepadAxisMovement(@intCast(i), @intCast(axis))), 10, offy, 10, ray.WHITE);
+        //            offy = offy + 11;
+        //        }
+        //
+        //        for (0..32) |button| {
+        //            ray.DrawText(ray.TextFormat("\tButton %d = %d", button, ray.IsGamepadButtonDown(@intCast(i), @intCast(button))), 10, offy, 10, ray.WHITE);
+        //            offy = offy + 11;
+        //        }
+        //    }
+        //}
+        //-------
 
         var cur_row: usize = 0;
         if (!sequencer.stepMode) {
@@ -187,10 +211,18 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         }
 
         if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
-            _ = menu.prev();
+            if (menuMode) {
+                _ = menu.prev();
+            } else {
+                _ = samplers.decrementRow();
+            }
         }
         if (ray.IsKeyPressed(ray.KEY_DOWN) or down and !down_prev) {
-            _ = menu.next();
+            if (menuMode) {
+                _ = menu.next();
+            } else {
+                _ = samplers.incrementRow();
+            }
         }
         if (ray.IsKeyPressed(ray.KEY_RIGHT) or right and !right_prev) {
             _ = menu.right();
@@ -199,11 +231,25 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             _ = menu.left();
         }
         if (ray.IsKeyPressed(ray.KEY_ENTER) or but_select) {
-            _ = menu.enter();
+            if (menuMode) {
+                _ = menu.enter();
+            } else {
+                menuMode = true;
+                menuactive = true;
+            }
         }
         if (ray.IsKeyPressed(ray.KEY_BACKSPACE) or but_start) {
-            _ = menu.leave();
+            std.debug.print("leave\n", .{});
+            const tmp = menu.leave();
+            std.debug.print("leave {?} {?}\n", .{ tmp, menuactive });
+            if (!menuactive) {
+                menuMode = false;
+            }
+            std.debug.print("leave {?} {?}\n", .{ tmp, menuactive });
+            menuactive = tmp;
+            std.debug.print("leave {?} {?}\n", .{ tmp, menuactive });
         }
+
         left_prev = left;
         right_prev = right;
         up_prev = up;
@@ -255,7 +301,11 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         const mText = menu.current();
         const concatenated = try helper.SubString(std.heap.page_allocator, @constCast(mText), 30);
         defer std.heap.page_allocator.free(concatenated);
-        ray.DrawRectangleLines(10, 115, 780, 96, ray.WHITE);
+        if (!menuMode) {
+            ray.DrawRectangleLines(10, 115, 780, 96, ray.WHITE);
+        } else {
+            ray.DrawRectangleLines(10, 115, 780, 96, ray.RED);
+        }
         ray.DrawText(padString, 12, 125, 20, ray.WHITE);
         ray.DrawText(@ptrCast(@constCast(concatenated)), 12, 155, 45, ray.WHITE);
         if (joyStickDetected) {
@@ -280,10 +330,15 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             ray.WrapDrawRectangleRec(b, btn_colors[i]);
         }
         // DRAW Active Buttons (Gamepi)
+
         const i: c_int = @intCast(cur_row % 4);
         const ix = @as(c_int, 5);
         const iy = 215 + i * 10 + i * 50;
-        ray.DrawRectangleLines(ix, iy, 240, 60, ray.RED);
+        if (!menuMode) {
+            ray.DrawRectangleLines(ix, iy, 240, 60, ray.RED);
+        } else {
+            ray.DrawRectangleLines(ix, iy, 240, 60, ray.WHITE);
+        }
         //--------------------------------------------------------------------------------------------------------------------------
         var ba = ray.Rectangle{ .x = 300, .y = 215, .width = 150, .height = 50 };
         ray.WrapDrawRectangleRec(&ba, ray.PURPLE);

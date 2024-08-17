@@ -19,6 +19,8 @@ pub const pulseDefaultCaptureDevice: []u8 = @constCast("PCM2902 Audio Codec Anal
 
 //ui
 pub const gamePadMapping: []u8 = @constCast("15000000010000000500000000010000,mkarcadejoystick GPIO Controller,platform:Linux,a:b1,b:b0,x:b3,y:b2,back:b7,start:b6,leftshoulder:b5,rightshoulder:b4,leftx:a0,lefty:a1,");
+//RAY5?
+//pub const gamePadMapping: []u8 = @constCast("15000000010000000100000000010000,mkarcadejoystick GPIO Controller,platform:Linux,a:b1,b:b0,x:b3,y:b2,back:b7,start:b6,leftshoulder:b5,rightshoulder:b4,leftx:a0,lefty:a1,");
 
 // global exit
 pub var exit = false;

@@ -7,7 +7,7 @@ pub const closeBoxFun = *const fn (?*anyopaque) callconv(.C) void;
 pub const addNumEntryFun = *const fn (?*anyopaque, [*c]const u8, [*c]f32, f32, f32, f32, f32) callconv(.C) void;
 
 fn openHorizontalBoxImpl(ui: ?*anyopaque, label: [*c]const u8) callconv(.C) void {
-    var gh:*GroupHolder = @ptrCast(@alignCast(ui));
+    var gh: *GroupHolder = @ptrCast(@alignCast(ui));
     if (gh.label[0] == 0) {
         gh.label = label;
     }
@@ -16,13 +16,13 @@ fn openHorizontalBoxImpl(ui: ?*anyopaque, label: [*c]const u8) callconv(.C) void
     std.debug.print("openHorizontalBoxImpl:{s}\n", .{label});
 }
 fn openVerticalBoxImpl(ui: ?*anyopaque, label: [*c]const u8) callconv(.C) void {
-    var gh:*GroupHolder = @ptrCast(@alignCast(ui));
+    var gh: *GroupHolder = @ptrCast(@alignCast(ui));
     gh.openBoxes += 1;
     gh.items[gh.count].label = label;
     //std.debug.print("openVerticalBoxImpl:{s}\n", .{label});
 }
 fn closeBoxImpl(ui: ?*anyopaque) callconv(.C) void {
-    var gh:*GroupHolder = @ptrCast(@alignCast(ui));
+    var gh: *GroupHolder = @ptrCast(@alignCast(ui));
     gh.openBoxes -= 1;
     if (gh.openBoxes > 0) {
         gh.count += 1;
@@ -30,7 +30,7 @@ fn closeBoxImpl(ui: ?*anyopaque) callconv(.C) void {
     }
 }
 fn addCheckButtonImpl(ui: ?*anyopaque, label: [*c]const u8, valuePtr: [*c]f32) callconv(.C) void {
-    var gh:*GroupHolder = @ptrCast( @alignCast(ui));
+    var gh: *GroupHolder = @ptrCast(@alignCast(ui));
     var ig: *ItemGroup = &gh.items[gh.count];
     ig.items[ig.count] = MItem{
         .label = label,
@@ -46,7 +46,7 @@ fn addCheckButtonImpl(ui: ?*anyopaque, label: [*c]const u8, valuePtr: [*c]f32) c
     ig.count += 1;
 }
 fn addNumEntryImpl(ui: ?*anyopaque, label: [*c]const u8, valuePtr: [*c]f32, default: f32, min: f32, max: f32, inc: f32) callconv(.C) void {
-    var gh:*GroupHolder = @ptrCast(@alignCast(ui));
+    var gh: *GroupHolder = @ptrCast(@alignCast(ui));
     var ig: *ItemGroup = &gh.items[gh.count];
     ig.items[ig.count] = MItem{
         .label = label,
@@ -81,14 +81,14 @@ pub fn newUIGlue() !*UIGlue {
         ig.count = 0;
         ig.selected = 0;
     }
-    groupholder.openBoxes=0;
-    groupholder.count=0;
-    retval.uiInterface=@ptrCast(&groupholder);
-    retval.openHorizontalBox=openHorizontalBoxImpl;
-    retval.openVerticalBox= openVerticalBoxImpl;
-    retval.closeBox= closeBoxImpl;
-    retval.addCheckButton= addCheckButtonImpl;
-    retval.addNumEntry= addNumEntryImpl;
+    groupholder.openBoxes = 0;
+    groupholder.count = 0;
+    retval.uiInterface = @ptrCast(&groupholder);
+    retval.openHorizontalBox = openHorizontalBoxImpl;
+    retval.openVerticalBox = openVerticalBoxImpl;
+    retval.closeBox = closeBoxImpl;
+    retval.addCheckButton = addCheckButtonImpl;
+    retval.addNumEntry = addNumEntryImpl;
     return &retval;
 }
 
@@ -113,16 +113,16 @@ pub const ItemGroup = extern struct {
 pub const GroupHolder = extern struct { label: [*c]const u8, openBoxes: usize, count: usize, items: [16]ItemGroup };
 
 pub fn MenuItemsFromUIGlue(alloc: std.mem.Allocator, uiGlue: *UIGlue) ![]MenuItem {
-    const tmp:*GroupHolder = @ptrCast(@alignCast(uiGlue.*.uiInterface));
+    const tmp: *GroupHolder = @ptrCast(@alignCast(uiGlue.*.uiInterface));
     const gCount = tmp.count;
     const items: []MenuItem = try alloc.alloc(MenuItem, gCount);
-    for (items,0..) |*item, i| {
+    for (items, 0..) |*item, i| {
         item.label = tmp.items[i].label;
         item.valueStr = "";
         item.selected = 0;
         const iCount = tmp.items[i].count;
         item.menuValues = try alloc.alloc(MenuValue, iCount);
-        for (item.menuValues,0..) |*value, j| {
+        for (item.menuValues, 0..) |*value, j| {
             value.label = tmp.items[i].items[j].label;
             value.toggle = tmp.items[i].items[j].toggle;
             value.value = tmp.items[i].items[j].value;
@@ -174,6 +174,7 @@ pub const MenuItem = struct {
         return .{
             .impl = @ptrCast(self),
             .enterFn = enterIImpl,
+            .leaveFn = leaveIImpl,
             .rightFn = rightIImpl,
             .leftFn = leftIImpl,
             .upFn = upIImpl,
@@ -212,31 +213,34 @@ pub const MenuItem = struct {
     }
 
     pub fn enterIImpl(self_void: *anyopaque) void {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         self.enter();
     }
+    pub fn leaveIImpl(self_void: *anyopaque) void {
+        _ = self_void;
+    }
     pub fn rightIImpl(self_void: *anyopaque) void {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         self.right();
     }
     pub fn leftIImpl(self_void: *anyopaque) void {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         self.left();
     }
     pub fn upIImpl(self_void: *anyopaque) void {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         self.up();
     }
     pub fn downIImpl(self_void: *anyopaque) void {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         self.down();
     }
     pub fn currentIImpl(self_void: *anyopaque) [*c]const u8 {
-        var self:*MenuItem = @ptrCast(@alignCast(self_void));
+        var self: *MenuItem = @ptrCast(@alignCast(self_void));
         return self.current();
     }
     pub fn labelIImpl(self_void: *anyopaque) [*c]const u8 {
-        const self:*MenuItem = @ptrCast(@alignCast(self_void));
+        const self: *MenuItem = @ptrCast(@alignCast(self_void));
         return self.label;
     }
 };
@@ -244,6 +248,7 @@ pub const MenuItem = struct {
 pub const IMenuItem = struct {
     impl: *anyopaque,
     enterFn: *const fn (*anyopaque) void,
+    leaveFn: *const fn (*anyopaque) void,
     rightFn: *const fn (*anyopaque) void,
     leftFn: *const fn (*anyopaque) void,
     upFn: *const fn (*anyopaque) void,
@@ -252,6 +257,9 @@ pub const IMenuItem = struct {
     labelFn: *const fn (*anyopaque) [*c]const u8,
     pub fn enter(iface: *const IMenuItem) void {
         return iface.enterFn(iface.impl);
+    }
+    pub fn leave(iface: *const IMenuItem) void {
+        return iface.leaveFn(iface.impl);
     }
     pub fn right(iface: *const IMenuItem) void {
         return iface.rightFn(iface.impl);
