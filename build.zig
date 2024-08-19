@@ -35,8 +35,10 @@ pub fn build(b: *std.Build) void {
         },
         .linux => {
             std.debug.print("Buildning LINUX\n", .{});
-            exe.addIncludePath(b.path("ray5/include"));
-            exe.addLibraryPath(b.path("ray5/lib"));
+            //exe.addIncludePath(b.path("ray5/include"));
+            //exe.addLibraryPath(b.path("ray5/lib"));
+            exe.addIncludePath(b.path("lib/linux/include"));
+            exe.addLibraryPath(b.path("lib/linux/lib"));
             exe.linkSystemLibrary2("raylib", .{ .use_pkg_config = .no });
             //exe.addObjectFile(.{ .cwd_relative = "./lib/linux/lib/libraylib.a" });
         },

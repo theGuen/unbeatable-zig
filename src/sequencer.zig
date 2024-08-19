@@ -49,6 +49,7 @@ pub const Sequencer = struct {
     stepMode: bool,
     numBars: usize,
     curBar: usize,
+    nudge: i64,
     pub fn startRecording(self: *Sequencer) void {
         if (!self.recording) {
             self.recording = true;
@@ -58,8 +59,6 @@ pub const Sequencer = struct {
     }
     pub fn startPlaying(self: *Sequencer) void {
         self.loadCurrentPattern();
-        self.sort();
-
         if (!self.recording) {
             self.currentTick = -1;
             self.playing = true;
@@ -94,6 +93,7 @@ pub const Sequencer = struct {
     pub fn setStepMode(self: *Sequencer, stepMode: bool) void {
         self.stepMode = stepMode;
         if (!stepMode) {
+            self.sort();
             var clone = self.recordList.clone() catch return;
             const sl = clone.toOwnedSlice() catch return;
             self.pattern[self.currentPattern] = sl;
@@ -113,14 +113,19 @@ pub const Sequencer = struct {
             const evt = self.recordList.items[i];
             const tmp = @divTrunc(evt.timeCode, (settings.ppq / 4)) * (settings.ppq / 4);
             if (tmp == onTick and evt.padNumber == pad) {
+                std.debug.print("true {} {} {}\n", .{ evt.padNumber, tmp, onTick });
                 found = i;
                 break;
             }
         }
         if (found == null) {
-            self.recordList.append(NewSequencerEvent(onTick, pad, EventType.note_on)) catch return;
+            const onTickTmp = onTick + @as(i64, @intCast(self.nudge));
+            self.recordList.append(NewSequencerEvent(onTickTmp, pad, EventType.note_on)) catch return;
         } else {
-            _ = self.recordList.orderedRemove(found.?);
+            std.debug.print("len {}\n", .{self.recordList.items.len});
+            const removed = self.recordList.orderedRemove(found.?);
+            std.debug.print("true {}\n", .{removed});
+            std.debug.print("len {}\n", .{self.recordList.items.len});
         }
         if (onTick >= self.numBars * settings.ppq * 4) {
             const tmp: usize = self.numBars * @as(usize, settings.ppq * 4);
@@ -197,8 +202,6 @@ pub const Sequencer = struct {
     pub fn setCurrentPattern(self: *Sequencer, pattern: usize) void {
         self.currentPattern = pattern;
         loading = true;
-        self.recordList.deinit();
-        self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
         self.loadCurrentPattern();
         loading = false;
     }
@@ -206,6 +209,9 @@ pub const Sequencer = struct {
         self.nextPattern = pattern;
     }
     pub fn loadCurrentPattern(self: *Sequencer) void {
+        self.recordList.deinit();
+        self.recordList = std.ArrayList(SequencerEvent).init(self.alloc);
+
         const oneBar: usize = @as(usize, settings.ppq * 4);
         var lastTimeCode: i64 = 0;
         for (self.pattern[self.currentPattern]) |entry| {
@@ -213,6 +219,7 @@ pub const Sequencer = struct {
             lastTimeCode = entry.timeCode;
         }
         self.numBars = @as(usize, @intCast(lastTimeCode)) / oneBar + 1;
+        std.debug.print("loadCurrentPattern {}\n", .{self.recordList.items.len});
     }
     pub fn sixteenth(self: *Sequencer, pad: usize, cur_row: usize) [16]bool {
         var retval = [16]bool{ false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false };
@@ -228,6 +235,40 @@ pub const Sequencer = struct {
         }
         return retval;
     }
+    pub fn incrementRow(self: *Sequencer) usize {
+        if (self.curBar < 15) {
+            self.curBar += 1;
+        } else {
+            self.curBar = 0;
+        }
+        return self.curBar;
+    }
+    pub fn decrementRow(self: *Sequencer) usize {
+        if (self.curBar > 0) {
+            self.curBar -= 1;
+        } else {
+            self.curBar = 15;
+        }
+        return self.curBar;
+    }
+    pub fn incrementNudge(self: *Sequencer) i64 {
+        const maxNudge = settings.ppq / 4;
+        if (self.nudge < maxNudge - 1) {
+            self.nudge += 1;
+        } else {
+            self.nudge = 0;
+        }
+        return self.nudge;
+    }
+    pub fn decrementNudge(self: *Sequencer) i64 {
+        const maxNudge = settings.ppq / 4;
+        if (self.nudge > 0) {
+            self.nudge -= 1;
+        } else {
+            self.nudge = maxNudge - 1;
+        }
+        return self.nudge;
+    }
 };
 
 pub fn newSequencer(
@@ -236,7 +277,7 @@ pub fn newSequencer(
 ) Sequencer {
     const c: c_int = @divFloor(settings.minute, settings.bpm * settings.ppq);
     tim.startTimer(c, tick_callback);
-    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .pattern = undefined, .currentPattern = 0, .nextPattern = 0, .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c, .stepMode = false, .numBars = 1, .curBar = 0 };
+    const this = Sequencer{ .alloc = alloc, .recordList = std.ArrayList(SequencerEvent).init(alloc), .pattern = undefined, .currentPattern = 0, .nextPattern = 0, .prepared = false, .playing = false, .recording = false, .sampler = sampler, .currentTick = -1, .micros = c, .stepMode = false, .numBars = 1, .curBar = 0, .nudge = 0 };
     sequencer = this;
     return this;
 }

@@ -13,12 +13,17 @@ const settings = @import("settings.zig");
 var sampler: smplr.Sampler = undefined;
 
 // TODO: extract a mixer
-fn mix() [2]f32 {
-    var sample = [2]f32{ 0, 0 };
+fn mix() [4]f32 {
+    var sample = [4]f32{ 0, 0, 0, 0 };
     for (&sampler.sounds) |*p| {
         const temp = p.next();
-        sample[0] += temp[0];
-        sample[1] += temp[1];
+        if (p.mixbus == 0) {
+            sample[0] += temp[0];
+            sample[1] += temp[1];
+        } else {
+            sample[2] += temp[0];
+            sample[3] += temp[1];
+        }
     }
     return sample;
 }

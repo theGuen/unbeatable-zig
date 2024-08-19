@@ -122,6 +122,9 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
         ray.BeginDrawing();
         defer ray.EndDrawing();
+        if (false) {
+            continue;
+        }
         //-------
         //8, 9
         //var offy: c_int = 5;
@@ -339,45 +342,52 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         } else {
             ray.DrawRectangleLines(ix, iy, 240, 60, ray.WHITE);
         }
-        //--------------------------------------------------------------------------------------------------------------------------
-        var ba = ray.Rectangle{ .x = 300, .y = 215, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&ba, ray.PURPLE);
-
-        var bb = ray.Rectangle{ .x = 460, .y = 215, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bb, ray.VIOLET);
-
-        var bc = ray.Rectangle{ .x = 620, .y = 215, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bc, ray.DARKPURPLE);
-        ray.DrawText("Pad Mode", 620, 215, 25, ray.WHITE);
-
-        var bd = ray.Rectangle{ .x = 300, .y = 275, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bd, ray.GREEN);
-
-        var be = ray.Rectangle{ .x = 460, .y = 275, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&be, ray.LIME);
-
-        var bf = ray.Rectangle{ .x = 620, .y = 275, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bf, ray.DARKGREEN);
-        ray.DrawText("Menu Mode", 620, 275, 25, ray.WHITE);
-
-        var bg = ray.Rectangle{ .x = 300, .y = 335, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bg, ray.SKYBLUE);
-
-        var bh = ray.Rectangle{ .x = 460, .y = 335, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bh, ray.BLUE);
-
-        var bi = ray.Rectangle{ .x = 620, .y = 335, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bi, ray.DARKBLUE);
-
-        var bj = ray.Rectangle{ .x = 300, .y = 395, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bj, ray.BEIGE);
-
-        var bk = ray.Rectangle{ .x = 460, .y = 395, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bk, ray.BROWN);
-
-        var bl = ray.Rectangle{ .x = 620, .y = 395, .width = 150, .height = 50 };
-        ray.WrapDrawRectangleRec(&bl, ray.DARKBROWN);
+        drawExtraElements();
     }
+}
+
+pub fn drawExtraElements() void {
+    var ba = ray.Rectangle{ .x = 300, .y = 215, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&ba, ray.PURPLE);
+
+    var bb = ray.Rectangle{ .x = 460, .y = 215, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bb, ray.VIOLET);
+    ray.DrawText("Nudge", 460, 215, 25, ray.WHITE);
+
+    var bc = ray.Rectangle{ .x = 620, .y = 215, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bc, ray.DARKPURPLE);
+    ray.DrawText("Pad Mode", 620, 215, 25, ray.YELLOW);
+
+    var bd = ray.Rectangle{ .x = 300, .y = 275, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bd, ray.GREEN);
+
+    var be = ray.Rectangle{ .x = 460, .y = 275, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&be, ray.LIME);
+    ray.DrawText("Mute", 460, 275, 25, ray.WHITE);
+
+    var bf = ray.Rectangle{ .x = 620, .y = 275, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bf, ray.DARKGREEN);
+    ray.DrawText("Menu Mode", 620, 275, 25, ray.WHITE);
+
+    var bg = ray.Rectangle{ .x = 300, .y = 335, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bg, ray.SKYBLUE);
+
+    var bh = ray.Rectangle{ .x = 460, .y = 335, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bh, ray.BLUE);
+
+    var bi = ray.Rectangle{ .x = 620, .y = 335, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bi, ray.DARKBLUE);
+    ray.DrawText("Step Mode", 620, 335, 25, ray.WHITE);
+
+    var bj = ray.Rectangle{ .x = 300, .y = 395, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bj, ray.BEIGE);
+
+    var bk = ray.Rectangle{ .x = 460, .y = 395, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bk, ray.BROWN);
+
+    var bl = ray.Rectangle{ .x = 620, .y = 395, .width = 150, .height = 50 };
+    ray.WrapDrawRectangleRec(&bl, ray.DARKBROWN);
+    ray.DrawText("SEQ Mode", 620, 395, 25, ray.WHITE);
 }
 
 pub fn padPressed(i: usize, r: usize, samplers: *smplr.Sampler, sequencer: *seq.Sequencer, btn_colors: []ray.Color) usize {
@@ -413,6 +423,7 @@ pub fn padRelease(i: usize, r: usize, samplers: *smplr.Sampler, sequencer: *seq.
     return currentPad;
 }
 
+//--------------------------------------------------------------------------------------------------------------------------
 const ButtonStates = struct {
     left: bool,
     right: bool,
@@ -445,11 +456,11 @@ const ButtonStates = struct {
         // Update current states
         const vx = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_X);
         const vy = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_Y);
-
         self.left = vx < 0;
         self.right = vx > 0;
         self.up = vy < 0;
         self.down = vy > 0;
+
         self.but_a = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         self.but_a_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         self.but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);

@@ -126,9 +126,18 @@ pub const Sampler = struct {
     pub fn getSoundGain(self: *Sampler) f32 {
         return self.sounds[self.selectedSound].gain;
     }
+    pub fn setSoundMixBus(self: *Sampler, bus: usize) usize {
+        var sound = &self.sounds[self.selectedSound];
+        sound.mixbus = bus;
+        return bus;
+    }
+    pub fn getSoundMixBus(self: *Sampler) usize {
+        return self.sounds[self.selectedSound].mixbus;
+    }
     pub fn getSoundCurrentPos(self: *Sampler) i64 {
         return @intFromFloat(self.sounds[self.selectedSound].posf);
     }
+    
     pub fn cropSound(self: *Sampler, src: usize) bool {
         const sound: *Sound = &self.sounds[src];
         sound.playing = false;

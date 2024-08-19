@@ -9,25 +9,24 @@ const settings = @import("settings.zig");
 fn leave(self: *ProjectValue) void {
     _ = self;
 }
+
+const ns_per_us: u64 = 1000;
+const ns_per_ms: u64 = 1000 * ns_per_us;
+const ns_per_s: u64 = 1000 * ns_per_ms;
 fn upsave(self: *ProjectValue) void {
     smplr.saveSamplerConfig(self.alloc, self.sampler) catch {};
+    
+    std.heap.page_allocator.free(self.state.stateValStr);
+    self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "saving project", .{}) catch "";
     seq.saveSequence(self.sequencer) catch {};
     std.heap.page_allocator.free(self.state.stateValStr);
-    self.state.stateValInt = 1;
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "project saved", .{}) catch "";
 }
 fn downsave(self: *ProjectValue) void {
     std.heap.page_allocator.free(self.state.stateValStr);
-    self.state.stateValInt = 0;
     self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "save project", .{}) catch "";
 }
 fn currentsave(self: *ProjectValue) [*c]const u8 {
-    std.heap.page_allocator.free(self.state.stateValStr);
-    if (self.state.stateValInt == 1) {
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "project saved", .{}) catch "";
-    } else {
-        self.state.stateValStr = std.fmt.allocPrint(std.heap.page_allocator, "save project", .{}) catch "";
-    }
     return @ptrCast(self.state.stateValStr);
 }
 
@@ -182,7 +181,7 @@ pub fn buildProjectMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, sequ
     var menuItem: []ProjectMenuItem = try alloc.alloc(ProjectMenuItem, 1);
     var menuValues: []ProjectValue = try alloc.alloc(ProjectValue, 3);
     menuValues[0] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "project BPM", .increment = upBPM, .decrement = downBPM, .current = currentBPM, .leave = leaveBPM, .loaded = false, .state = menu.newState() };
-    menuValues[1] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "save project", .increment = upsave, .decrement = downsave, .current = currentsave, .leave = leave, .loaded = false, .state = menu.newState() };
+    menuValues[1] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "save project", .increment = upsave, .decrement = downsave, .current = currentsave, .leave = leave, .loaded = false, .state =  menu.newStateLabeled(@constCast("save project")) };
     menuValues[2] = ProjectValue{ .alloc = alloc, .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quit ASD", .increment = upexit, .decrement = downexit, .current = currentexit, .leave = leave, .loaded = false, .state = menu.newState() };
 
     menuItem[0].label = "Project";

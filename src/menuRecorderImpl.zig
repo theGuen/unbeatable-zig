@@ -246,8 +246,8 @@ pub fn buildRecorderMenu(alloc: std.mem.Allocator, recorder: *rcdr.Recorder, seq
     var menuValues: []RecorderValue = try alloc.alloc(RecorderValue, 7);
     menuValues[0] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "record sample", .increment = uprecord, .decrement = downrecord, .current = currentrecord, .loaded = false, .state = mn.newState() };
     menuValues[1] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "enable line in", .increment = upLineIn, .decrement = downLineIn, .current = currentLineIn, .loaded = false, .state = mn.newState() };
+    
     menuValues[2] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "record sequence", .increment = uprecseq, .decrement = downrecseq, .current = currentrecseq, .loaded = false, .state = mn.newState() };
-
     menuValues[3] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "delete sequence", .increment = updelseq, .decrement = downdelseq, .current = currentdelseq, .loaded = false, .state = mn.newState() };
     menuValues[4] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "clicktrack", .increment = upclickTrack, .decrement = downclickTrack, .current = currentclickTrack, .loaded = false, .state = mn.newState() };
     menuValues[5] = RecorderValue{ .recorder = recorder, .sequencer = sequencer, .sampler = sampler, .label = "quantize", .increment = upQuant, .decrement = downQuant, .current = currentQuant, .loaded = false, .state = mn.newState() };
