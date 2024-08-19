@@ -207,6 +207,9 @@ pub const Sequencer = struct {
     }
     pub fn setNextPattern(self: *Sequencer, pattern: usize) void {
         self.nextPattern = pattern;
+        if (!self.playing) {
+            self.setCurrentPattern(pattern);
+        }
     }
     pub fn loadCurrentPattern(self: *Sequencer) void {
         self.recordList.deinit();

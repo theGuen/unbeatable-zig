@@ -18,7 +18,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
     //_ = ray.SetGamepadMappings(@ptrCast(settings.gamePadMapping));
     ray.InitWindow(screenWidth, screenHeight, "ADC - Arcade Drum Center");
     defer ray.CloseWindow();
-    ray.SetTargetFPS(30);
+    ray.SetTargetFPS(60);
     const cols = 4;
     const rows = 16;
     var buttons: [cols * 4]ray.Rectangle = undefined;
@@ -37,24 +37,19 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         b.* = ray.GREEN;
     }
 
-    const keys = [_]c_int{ ray.KEY_ONE, ray.KEY_TWO, ray.KEY_THREE, ray.KEY_FOUR, ray.KEY_Q, ray.KEY_W, ray.KEY_E, ray.KEY_R, ray.KEY_A, ray.KEY_S, ray.KEY_D, ray.KEY_F, ray.KEY_Z, ray.KEY_X, ray.KEY_C, ray.KEY_V };
-
     var currentPad: usize = 0;
     var joyStickDetected: bool = false;
 
-    var left = false;
-    var right = false;
-    var up = false;
-    var down = false;
-    var left_prev = false;
-    var right_prev = false;
-    var up_prev = false;
-    var down_prev = false;
     var menuMode = false;
     var menuactive = false;
+    var kbState = NewButtonStates();
+    var gpState = NewButtonStates();
     while (!ray.WindowShouldClose() and !settings.exit) {
         currentPad = samplers.selectedSound;
         joyStickDetected = ray.IsGamepadAvailable(0);
+
+        kbState.updateFromKeyboard();
+        gpState.update();
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC Sample Display
         const showSample = true;
@@ -122,32 +117,6 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         //--------------------------------------------------------------------------------------------------------------------------
         ray.BeginDrawing();
         defer ray.EndDrawing();
-        if (false) {
-            continue;
-        }
-        //-------
-        //8, 9
-        //var offy: c_int = 5;
-        //for (0..4) |i| // MAX_GAMEPADS = 4
-        //{
-        //    if (ray.IsGamepadAvailable(@intCast(i))) {
-        //        ray.DrawText(ray.TextFormat("Gamepad name: %s", ray.GetGamepadName(@intCast(i))), 10, offy, 10, ray.WHITE);
-        //        offy = offy + 11;
-        //        ray.DrawText(ray.TextFormat("\tAxis count:   %d", ray.GetGamepadAxisCount(@intCast(i))), 10, offy, 10, ray.WHITE);
-        //        offy = offy + 11;
-        //
-        //        for (0..@intCast(ray.GetGamepadAxisCount(@intCast(i)))) |axis| {
-        //            ray.DrawText(ray.TextFormat("\tAxis %d = %f", axis, ray.GetGamepadAxisMovement(@intCast(i), @intCast(axis))), 10, offy, 10, ray.WHITE);
-        //            offy = offy + 11;
-        //        }
-        //
-        //        for (0..32) |button| {
-        //            ray.DrawText(ray.TextFormat("\tButton %d = %d", button, ray.IsGamepadButtonDown(@intCast(i), @intCast(button))), 10, offy, 10, ray.WHITE);
-        //            offy = offy + 11;
-        //        }
-        //    }
-        //}
-        //-------
 
         var cur_row: usize = 0;
         if (!sequencer.stepMode) {
@@ -167,73 +136,27 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
         }
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC MENU INPUT
-        const vx = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_X);
-        const vy = ray.GetGamepadAxisMovement(0, ray.GAMEPAD_AXIS_LEFT_Y);
-        left = vx < 0;
-        right = vx > 0;
-        up = vy < 0;
-        down = vy > 0;
-
-        const but_a = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        const but_a_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        const but_b = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-        const but_b_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
-        const but_x = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        const but_x_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_LEFT);
-        const but_y = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
-        const but_y_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
-        const but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
-        const but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
-
-        if (but_a) {
-            currentPad = padPressed(0, cur_row, samplers, sequencer, &btn_colors);
-        }
-        if (but_a_rel) {
-            _ = padRelease(0, cur_row, samplers, sequencer, &btn_colors, &page_colors);
-        }
-
-        if (but_b) {
-            currentPad = padPressed(1, cur_row, samplers, sequencer, &btn_colors);
-        }
-        if (but_b_rel) {
-            _ = padRelease(1, cur_row, samplers, sequencer, &btn_colors, &page_colors);
-        }
-
-        if (but_x) {
-            currentPad = padPressed(2, cur_row, samplers, sequencer, &btn_colors);
-        }
-        if (but_x_rel) {
-            _ = padRelease(2, cur_row, samplers, sequencer, &btn_colors, &page_colors);
-        }
-
-        if (but_y) {
-            currentPad = padPressed(3, cur_row, samplers, sequencer, &btn_colors);
-        }
-        if (but_y_rel) {
-            _ = padRelease(3, cur_row, samplers, sequencer, &btn_colors, &page_colors);
-        }
-
-        if (ray.IsKeyPressed(ray.KEY_UP) or up and !up_prev) {
+        if (kbState.isUp() or gpState.isUp()) {
             if (menuMode) {
                 _ = menu.prev();
             } else {
                 _ = samplers.decrementRow();
             }
         }
-        if (ray.IsKeyPressed(ray.KEY_DOWN) or down and !down_prev) {
+        if (kbState.isDown() or gpState.isDown()) {
             if (menuMode) {
                 _ = menu.next();
             } else {
                 _ = samplers.incrementRow();
             }
         }
-        if (ray.IsKeyPressed(ray.KEY_RIGHT) or right and !right_prev) {
+        if (kbState.isRight() or gpState.isRight()) {
             _ = menu.right();
         }
-        if (ray.IsKeyPressed(ray.KEY_LEFT) or left and !left_prev) {
+        if (kbState.isLeft() or gpState.isLeft()) {
             _ = menu.left();
         }
-        if (ray.IsKeyPressed(ray.KEY_ENTER) or but_select) {
+        if (kbState.but_select or gpState.but_select) {
             if (menuMode) {
                 _ = menu.enter();
             } else {
@@ -241,7 +164,7 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
                 menuactive = true;
             }
         }
-        if (ray.IsKeyPressed(ray.KEY_BACKSPACE) or but_start) {
+        if (kbState.but_start or gpState.but_start) {
             std.debug.print("leave\n", .{});
             const tmp = menu.leave();
             std.debug.print("leave {?} {?}\n", .{ tmp, menuactive });
@@ -253,31 +176,17 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             std.debug.print("leave {?} {?}\n", .{ tmp, menuactive });
         }
 
-        left_prev = left;
-        right_prev = right;
-        up_prev = up;
-        down_prev = down;
         //--------------------------------------------------------------------------------------------------------------------------
         // CALC PAD INPUT
 
-        if (sequencer.prepared and (but_a or but_b or but_x or but_y)) {
-            if (sequencer.prepared) {
-                _ = sequencer.startRecording();
-                sequencer.prepared = false;
-            }
-        }
-
-        for (keys, 0..) |k, i| {
-            if (ray.IsKeyPressed(k)) {
+        for (0..16) |i| {
+            if (kbState.isPadPressed(i) or gpState.isPadPressed(i)) {
                 currentPad = padPressed(i, cur_row, samplers, sequencer, &btn_colors);
             }
-            if (ray.IsKeyReleased(k)) {
+            if (kbState.isPadReleased(i) or gpState.isPadReleased(i)) {
                 _ = padRelease(i, cur_row, samplers, sequencer, &btn_colors, &page_colors);
             }
         }
-        //--------------------------------------------------------------------------------------------------------------------------
-        //ray.BeginDrawing();
-        //defer ray.EndDrawing();
         //--------------------------------------------------------------------------------------------------------------------------
         // DRAW WAV Display
         ray.ClearBackground(ray.BLACK);
@@ -310,6 +219,10 @@ pub fn drawWindow(samplers: *smplr.Sampler, menu: *mn.Menu, sequencer: *seq.Sequ
             ray.DrawRectangleLines(10, 115, 780, 96, ray.RED);
         }
         ray.DrawText(padString, 12, 125, 20, ray.WHITE);
+
+        const jbt = JoystickButtonTest();
+        ray.DrawText(ray.TextFormat("%d/%d", jbt.controllerNr,jbt.buttonNumber), 700, 125, 20, ray.WHITE);
+
         ray.DrawText(@ptrCast(@constCast(concatenated)), 12, 155, 45, ray.WHITE);
         if (joyStickDetected) {
             ray.DrawCircle(780, 130, 5, ray.GREEN);
@@ -445,6 +358,9 @@ const ButtonStates = struct {
     prev_right: bool,
     prev_up: bool,
     prev_down: bool,
+    pads: [16]c_int,
+    pressed_pads: [16]bool,
+    released_pads: [16]bool,
 
     pub fn update(self: *ButtonStates) void {
         // Store current states as previous
@@ -471,16 +387,100 @@ const ButtonStates = struct {
         self.but_y_rel = ray.IsGamepadButtonReleased(0, ray.GAMEPAD_BUTTON_RIGHT_FACE_UP);
         self.but_start = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_RIGHT);
         self.but_select = ray.IsGamepadButtonPressed(0, ray.GAMEPAD_BUTTON_MIDDLE_LEFT);
+        self.pressed_pads[0] = self.but_a;
+        self.released_pads[0] = self.but_a_rel;
+        self.pressed_pads[1] = self.but_b;
+        self.released_pads[1] = self.but_b_rel;
+        self.pressed_pads[2] = self.but_x;
+        self.released_pads[2] = self.but_x_rel;
+        self.pressed_pads[3] = self.but_y;
+        self.released_pads[3] = self.but_y_rel;
     }
 
-    pub fn isPressed(self: *ButtonStates, current: bool, prev: bool) bool {
-        _ = self;
-        return current and !prev;
+    pub fn isUp(self: *ButtonStates) bool {
+        return self.up and !self.prev_up;
     }
 
-    pub fn isReleased(self: *ButtonStates, current: bool, prev: bool) bool {
-        _ = self;
-        return !current and prev;
+    pub fn isUpReleased(self: *ButtonStates) bool {
+        return !self.up and self.prev_up;
+    }
+
+    pub fn isDown(self: *ButtonStates) bool {
+        return self.down and !self.prev_down;
+    }
+
+    pub fn isDownReleased(self: *ButtonStates) bool {
+        return !self.down and self.prev_down;
+    }
+
+    pub fn isLeft(self: *ButtonStates) bool {
+        return self.left and !self.prev_left;
+    }
+
+    pub fn isLeftReleased(self: *ButtonStates) bool {
+        return !self.left and self.prev_left;
+    }
+
+    pub fn isRight(self: *ButtonStates) bool {
+        return self.right and !self.prev_right;
+    }
+
+    pub fn isRightReleased(self: *ButtonStates) bool {
+        return !self.right and self.prev_right;
+    }
+
+    pub fn isPadPressed(self: *ButtonStates, pad: usize) bool {
+        return self.pressed_pads[pad];
+    }
+    pub fn isPadReleased(self: *ButtonStates, pad: usize) bool {
+        return self.released_pads[pad];
+    }
+
+    pub fn updateFromKeyboard(self: *ButtonStates) void {
+        self.left = false;
+        self.right = false;
+        self.up = false;
+        self.down = false;
+
+        self.prev_left = false;
+        self.prev_right = false;
+        self.prev_up = false;
+        self.prev_down = false;
+
+        self.left = ray.IsKeyPressed(ray.KEY_LEFT);
+        self.right = ray.IsKeyPressed(ray.KEY_RIGHT);
+        self.up = ray.IsKeyPressed(ray.KEY_UP);
+        self.down = ray.IsKeyPressed(ray.KEY_DOWN);
+
+        self.prev_left = ray.IsKeyReleased(ray.KEY_LEFT);
+        self.prev_right = ray.IsKeyReleased(ray.KEY_RIGHT);
+        self.prev_up = ray.IsKeyReleased(ray.KEY_UP);
+        self.prev_down = ray.IsKeyReleased(ray.KEY_DOWN);
+
+        self.but_a = ray.IsKeyPressed(ray.KEY_ONE);
+        self.but_a_rel = ray.IsKeyReleased(ray.KEY_ONE);
+        self.but_b = ray.IsKeyPressed(ray.KEY_TWO);
+        self.but_b_rel = ray.IsKeyReleased(ray.KEY_TWO);
+        self.but_x = ray.IsKeyPressed(ray.KEY_THREE);
+        self.but_x_rel = ray.IsKeyReleased(ray.KEY_THREE);
+        self.but_y = ray.IsKeyPressed(ray.KEY_FOUR);
+        self.but_y_rel = ray.IsKeyReleased(ray.KEY_FOUR);
+        self.but_start = ray.IsKeyPressed(ray.KEY_BACKSPACE);
+        self.but_select = ray.IsKeyPressed(ray.KEY_ENTER);
+
+        self.pressed_pads[0] = self.but_a;
+        self.released_pads[0] = self.but_a_rel;
+        self.pressed_pads[1] = self.but_b;
+        self.released_pads[1] = self.but_b_rel;
+        self.pressed_pads[2] = self.but_x;
+        self.released_pads[2] = self.but_x_rel;
+        self.pressed_pads[3] = self.but_y;
+        self.released_pads[3] = self.but_y_rel;
+
+        for (self.pads, 0..) |pad, i| {
+            self.pressed_pads[i] = ray.IsKeyPressed(pad);
+            self.released_pads[i] = ray.IsKeyReleased(pad);
+        }
     }
 };
 
@@ -504,5 +504,43 @@ fn NewButtonStates() ButtonStates {
         .prev_right = false,
         .prev_up = false,
         .prev_down = false,
+        .pads = [16]c_int{ ray.KEY_ONE, ray.KEY_TWO, ray.KEY_THREE, ray.KEY_FOUR, ray.KEY_Q, ray.KEY_W, ray.KEY_E, ray.KEY_R, ray.KEY_A, ray.KEY_S, ray.KEY_D, ray.KEY_F, ray.KEY_Z, ray.KEY_X, ray.KEY_C, ray.KEY_V },
+        .pressed_pads = [16]bool{ false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false },
+        .released_pads = [16]bool{ false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false },
     };
+}
+
+const ControllerButtonRaw = struct {
+        controllerNr: usize,
+        buttonNumber: i64,
+        axisNumber: i64,
+        down:bool,
+        move:bool,
+};
+
+fn JoystickButtonTest()ControllerButtonRaw{
+        var retval = ControllerButtonRaw{ .controllerNr=0, .buttonNumber=-1, .axisNumber=-1, .down=false,.move=false};
+        //8, 9
+        //for (0..4) |i| // MAX_GAMEPADS = 4
+        //{
+            const i = 0;
+            retval.controllerNr = i;
+            if (ray.IsGamepadAvailable(@intCast(i))) {        
+                for (0..@intCast(ray.GetGamepadAxisCount(@intCast(i)))) |axis| {
+                    const xm = ray.GetGamepadAxisMovement(@intCast(i), @intCast(axis));
+                    if (xm != 0){
+                        retval.axisNumber = @intCast(axis);
+                        retval.move = true;
+                    }
+                }
+        
+                for (0..32) |button| {
+                    if(ray.IsGamepadButtonDown(@intCast(i), @intCast(button))){
+                        retval.buttonNumber = @intCast(button);
+                        retval.down = true;
+                    }
+                }
+            }
+        //}
+        return retval;
 }

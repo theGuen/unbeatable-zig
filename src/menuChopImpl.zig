@@ -261,14 +261,14 @@ pub const ChopMenuItem = struct {
 pub fn buildChopMenu(alloc: std.mem.Allocator, sampler: *smplr.Sampler) ![]ChopMenuItem {
     var chopMenuItem: []ChopMenuItem = try alloc.alloc(ChopMenuItem, 1);
     var menuValues: []ChopValue = try alloc.alloc(ChopValue, 9);
-    menuValues[0] = ChopValue{ .sampler = sampler, .label = "start", .increment = upstart, .decrement = downstart, .current = currentstart, .state = mn.newState() };
-    menuValues[1] = ChopValue{ .sampler = sampler, .label = "end", .increment = upend, .decrement = downend, .current = currentend, .state = mn.newState() };
-    menuValues[2] = ChopValue{ .sampler = sampler, .label = "lazystart", .increment = upstartlazy, .decrement = downstartlazy, .current = currentstartlazy, .state = mn.newState() };
-    menuValues[3] = ChopValue{ .sampler = sampler, .label = "lazyend", .increment = upendlazy, .decrement = downendlazy, .current = currentendlazy, .state = mn.newState() };
-    menuValues[4] = ChopValue{ .sampler = sampler, .label = "move", .increment = upmovelazy, .decrement = downmovelazy, .current = currentmovelazy, .state = mn.newState() };
-    menuValues[5] = ChopValue{ .sampler = sampler, .label = "copy", .increment = upcopy, .decrement = downcopy, .current = currentcopy, .state = mn.newState() };
-    menuValues[6] = ChopValue{ .sampler = sampler, .label = "crop", .increment = upcrop, .decrement = downcrop, .current = currentcrop, .state = mn.newState() };
-    menuValues[7] = ChopValue{ .sampler = sampler, .label = "slice", .increment = upSlice, .decrement = downSlice, .current = currentSlice, .state = mn.newState() };
+    menuValues[0] = ChopValue{ .sampler = sampler, .label = "start", .increment = upstart, .decrement = downstart, .current = currentstart, .state = mn.newStateLabeled(@constCast("Start")) };
+    menuValues[1] = ChopValue{ .sampler = sampler, .label = "end", .increment = upend, .decrement = downend, .current = currentend, .state = mn.newStateLabeled(@constCast("End")) };
+    menuValues[2] = ChopValue{ .sampler = sampler, .label = "lazystart", .increment = upstartlazy, .decrement = downstartlazy, .current = currentstartlazy, .state = mn.newStateLabeled(@constCast("Lazy Strart")) };
+    menuValues[3] = ChopValue{ .sampler = sampler, .label = "lazyend", .increment = upendlazy, .decrement = downendlazy, .current = currentendlazy, .state = mn.newStateLabeled(@constCast("Lazy End")) };
+    menuValues[4] = ChopValue{ .sampler = sampler, .label = "move", .increment = upmovelazy, .decrement = downmovelazy, .current = currentmovelazy, .state = mn.newStateLabeled(@constCast("Move")) };
+    menuValues[5] = ChopValue{ .sampler = sampler, .label = "copy", .increment = upcopy, .decrement = downcopy, .current = currentcopy, .state = mn.newStateLabeled(@constCast("Copy")) };
+    menuValues[6] = ChopValue{ .sampler = sampler, .label = "crop", .increment = upcrop, .decrement = downcrop, .current = currentcrop, .state = mn.newStateLabeled(@constCast("Crop")) };
+    menuValues[7] = ChopValue{ .sampler = sampler, .label = "slice", .increment = upSlice, .decrement = downSlice, .current = currentSlice, .state = mn.newStateLabeled(@constCast("Slice")) };
     menuValues[8] = ChopValue{ .sampler = sampler, .label = "Row", .increment = upRow, .decrement = downRow, .current = currentRow, .state = mn.newStateLabeled(@constCast("Row 0")) };
 
     chopMenuItem[0].label = "Chop";
